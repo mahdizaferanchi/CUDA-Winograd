@@ -13,7 +13,7 @@ import numpy as np
 from numpy.random import *
 from random import randint
 import random
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from scipy import misc
 
 
