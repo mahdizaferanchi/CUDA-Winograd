@@ -120,6 +120,77 @@ __global__ void kernel_128_winograd_BtdB(float *pInputs, float *pOutputs) {
 }
 
 
+__global__ void kernel_128_one_step_AtIA(float *pInputs, float *pBiases, float *pScales, float *pOutputs) {
+	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = blockIdx.z, Inx = threadIdx.x;
+	int c_input = Inx*6 + Iny;
+
+	__shared__ float bias, scale;
+	extern __shared__ float input[];
+
+	input[c_input] = pInputs[c_input*16*128 + (Tilex*4+Tiley)*128 + kz];
+	bias = pBiases[kz];
+	scale = pScales[kz];
+	__syncthreads();
+
+	float coeffs = {
+		{1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 0
+		{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, 0, 2, 2, 2, 2, 2, 0, -2, -2, -2, -2, -2, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 1
+		{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 4, 4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 2
+		{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, 0, 8, 8, 8, 8, 8, 0, -8, -8, -8, -8, -8, 0, 1, 1, 1, 1, 1, 0}, // m = 0, n = 3
+		{0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 0
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, -1, 1, -2, 2, 0, 0, 2, -2, 4, -4, 0, 0, -2, 2, -4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 1
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 4, -4, 8, -8, 0, 0, 4, -4, 8, -8, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 2
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, -1, 1, -2, 2, 0, 0, 8, -8, 16, -16, 0, 0, -8, 8, -16, 16, 0, 0, 1, -1, 2, -2, 0}, // m = 1, n = 3
+		{0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 0
+		{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, -1, -1, -4, -4, 0, 0, 2, 2, 8, 8, 0, 0, -2, -2, -8, -8, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 1
+		{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 4, 4, 16, 16, 0, 0, 4, 4, 16, 16, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 2
+		{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, -1, -1, -4, -4, 0, 0, 8, 8, 32, 32, 0, 0, -8, -8, -32, -32, 0, 0, 1, 1, 4, 4, 0}, // m = 2, n = 3
+		{0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 0, 0, 0, 0, 0}, // m = 3, n = 0 
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, -1, 1, -8, 8, -1, 0, 2, -2, 16, -16, 2, 0, -2, 2, -16, 16, -2, 0, 0, 0, 0, 0, 0}, // m = 3, n = 1
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 4, -4, 32, -32, 4, 0, 4, -4, 32, -32, 4, 0, 0, 0, 0, 0, 0}, // m = 3, n = 2
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, -1, 1, -8, 8, -1, 0, 8, -8, 64, -64, 8, 0, -8, 8, -64, 64, -8, 0, 1, -1, 8, -8, 1}, // m = 3, n = 3
+	};
+
+	int coeffsIdx = oRow*4 + oCol;	
+	pOuputs[?] = 
+		coeffs[coeffsIdx][0] * pInputs[?] +
+		coeffs[coeffsIdx][1] * pInputs[?] +
+		coeffs[coeffsIdx][2] * pInputs[?] +
+		coeffs[coeffsIdx][3] * pInputs[?] +
+		coeffs[coeffsIdx][4] * pInputs[?] +
+		coeffs[coeffsIdx][5] * pInputs[?] +
+		coeffs[coeffsIdx][6] * pInputs[?] +
+		coeffs[coeffsIdx][7] * pInputs[?] +
+		coeffs[coeffsIdx][8] * pInputs[?] +
+		coeffs[coeffsIdx][9] * pInputs[?] +
+		coeffs[coeffsIdx][10] * pInputs[?] +
+		coeffs[coeffsIdx][11] * pInputs[?] +
+		coeffs[coeffsIdx][12] * pInputs[?] +
+		coeffs[coeffsIdx][14] * pInputs[?] +
+		coeffs[coeffsIdx][15] * pInputs[?] +
+		coeffs[coeffsIdx][16] * pInputs[?] +
+		coeffs[coeffsIdx][17] * pInputs[?] +
+		coeffs[coeffsIdx][18] * pInputs[?] +
+		coeffs[coeffsIdx][19] * pInputs[?] +
+		coeffs[coeffsIdx][20] * pInputs[?] +
+		coeffs[coeffsIdx][21] * pInputs[?] +
+		coeffs[coeffsIdx][22] * pInputs[?] +
+		coeffs[coeffsIdx][23] * pInputs[?] +
+		coeffs[coeffsIdx][24] * pInputs[?] +
+		coeffs[coeffsIdx][25] * pInputs[?] +
+		coeffs[coeffsIdx][26] * pInputs[?] +
+		coeffs[coeffsIdx][27] * pInputs[?] +
+		coeffs[coeffsIdx][28] * pInputs[?] +
+		coeffs[coeffsIdx][29] * pInputs[?] +
+		coeffs[coeffsIdx][30] * pInputs[?] +
+		coeffs[coeffsIdx][31] * pInputs[?] +
+		coeffs[coeffsIdx][32] * pInputs[?] +
+		coeffs[coeffsIdx][33] * pInputs[?] +
+		coeffs[coeffsIdx][34] * pInputs[?] +
+		coeffs[coeffsIdx][35] * pInputs[?] +
+		coeffs[coeffsIdx][36] * pInputs[?];
+}
+
 __global__ void kernel_128_winograd_AtIA(float *pInputs, float *pBiases, float *pScales, float *pOutputs) {
 	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = blockIdx.z, Inx = threadIdx.x;
 	int c_input = Inx*6 + Iny;
