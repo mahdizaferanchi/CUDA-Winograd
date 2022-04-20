@@ -24,6 +24,8 @@ uint64_t getTimeMicroseconds64();
 
 float output_checker(float* A, float* B, int len, int channel, int shift);
 
+void make_file(const char* filename, int quantity, float* content);
+
 #ifdef __cplusplus
 }
 #endif

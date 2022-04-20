@@ -215,9 +215,12 @@ __global__ void kernel_128_OuterProduct_128(float *A, float *B, float *C) {
 int kernel_128() {
 	float *input_ = get_parameter(inputName128, 16*16*128);
 	float *bias = get_parameter(biasName128, 128);
-	float *input, *output, *l_weights, *l_bias;
+	float *input, *output, *l_weights, *l_bias, *pooling_output;
 	uint64_t nT1 = 0, nT2 = 0, nT1_cudnn = 0, nT2_cudnn = 0;
 	cudaError_t s;
+	cudnnStatus_t status;
+
+	float one = 1.0, zero = 0.0;
 
 	/////////////////////////////////
 
@@ -232,9 +235,10 @@ int kernel_128() {
 	float *kernel = get_parameter(weight_winograd_Name128, 36*128*128);
 	float *l_bnBias, *l_bnScale, *bnBias, *bnScale;
 
-	int nInput = 16*16*128, nOutput = 16*16*128, nWeights = 36*128*128, nBias = 128, nTransInput = 16*6*6*128, nInnerProd = 16*6*6*128;
+	int nInput = 16*16*128, nOutput = 16*16*128, nWeights = 36*128*128, nBias = 128, nTransInput = 16*6*6*128, nInnerProd = 16*6*6*128, nPoolingOutput=9*9*128;
 	cudaMalloc((void **) &input, nInput<<3);
 	cudaMalloc((void **) &output, nOutput<<2);
+	cudaMalloc((void **) &pooling_output, nPoolingOutput<<2);
 	cudaMalloc((void **) &l_weights, nWeights<<2);
 	cudaMalloc((void **) &l_bias, nBias<<2);
 	cudaMalloc((void **) &t_input, nTransInput<<2);
@@ -255,7 +259,28 @@ int kernel_128() {
 	cudaMemcpy(l_bnBias, bnBias, nBias<<2, cudaMemcpyHostToDevice);
 	cudaMemcpy(l_bnScale, bnScale, nBias<<2, cudaMemcpyHostToDevice);
 	float tmp_winograd[nOutput];
+	float tmp_winograd_pooled[nPoolingOutput];
 
+	cudnnHandle_t win_handle;
+	cudnnTensorDescriptor_t winydesc, winpooldesc;
+	status = cudnnCreate(&win_handle);
+	cudnnPoolingDescriptor_t winpoolingDesc;
+	status = cudnnCreatePoolingDescriptor(&winpoolingDesc);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
+	// CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
+	status = cudnnSetPooling2dDescriptor(winpoolingDesc, CUDNN_POOLING_MAX,
+		CUDNN_NOT_PROPAGATE_NAN, 2, 2, 1, 1, 2, 2);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed17\n");
+
+	status = cudnnCreateTensorDescriptor(&winpooldesc);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed5.5\n");
+	status = cudnnSetTensor4dDescriptor(winpooldesc, CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, 128, 9, 9);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed5.51\n");
+
+	status = cudnnCreateTensorDescriptor(&winydesc);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed4\n");
+	status = cudnnSetTensor4dDescriptor(winydesc, CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, 128, 16, 16);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed5\n");
 	
 	/*  2. Computing  */
 	nT1 = getTimeMicroseconds64();
@@ -264,6 +289,10 @@ int kernel_128() {
 	kernel_128_OuterProduct_128<<<dim3(36, 2), dim3(128, 8), (8*128 + 64*128 + 8*128)<<2 >>> (t_input, l_weights, ip);
 	kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
 	//cudaCheckError();
+	status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
+		winydesc, output, &zero,
+		winpooldesc, pooling_output);
+	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
 	cudaDeviceSynchronize();
 	
 	nT2 = getTimeMicroseconds64();
@@ -273,10 +302,15 @@ int kernel_128() {
 	/*  3. Copy back and free  */
 	s = cudaMemcpy(tmp_winograd, output, nOutput<<2, cudaMemcpyDeviceToHost);
 	printf("%s\n", cudaGetErrorName(s));
+	s = cudaMemcpy(tmp_winograd_pooled, pooling_output, nPoolingOutput<<2, cudaMemcpyDeviceToHost);
+	printf("%s\n", cudaGetErrorName(s));
 	//cudaCheckError();
+	// make_file("./tensors/winograd_out.bin", nOutput, tmp_winograd);
+	// make_file("./tensors/winograd_out_pooled.bin", nPoolingOutput, tmp_winograd_pooled);
 
 	cudaFree(t_input);
 	cudaFree(output);
+	cudaFree(pooling_output);
 	cudaFree(l_weights);
 	cudaFree(l_bias);
 	cudaFree(ip);
@@ -284,6 +318,9 @@ int kernel_128() {
 	free(kernel);
 	free(bnScale);
 	free(bnBias);
+
+	status = cudnnDestroy(win_handle);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 
 
 	/////////////////////////////////
@@ -299,9 +336,10 @@ int kernel_128() {
 	float* eMean = get_parameter(eMeanName128, 128);
 	float* eVar = get_parameter(eVarName128, 128);
 	float *l_eMean, *l_eVar;
-	nInput = 16*16*128, nOutput = 14*14*128, nWeights = 3*3*128*128, nBias = 128;
+	nInput = 16*16*128, nOutput = 14*14*128, nWeights = 3*3*128*128, nBias = 128, nPoolingOutput=7*7*128;
 
 	cudaMalloc((void **) &output, nOutput<<2);
+	cudaMalloc((void **) &pooling_output, nPoolingOutput<<2);
 	cudaMalloc((void **) &l_weights, nWeights<<2);
 	cudaMalloc((void **) &l_bias, nBias<<2);
 	cudaMemcpy(l_weights, kernel, nWeights<<2, cudaMemcpyHostToDevice);
@@ -317,18 +355,17 @@ int kernel_128() {
 	cudaMemset((void *) output, 0, nOutput<<2);
 
 	float tmp_cudnn[nOutput];
+	float tmp_pooled[nPoolingOutput];
 
 
 	/*  2. cuDNN preparation  */
-	cudnnStatus_t status;
-	float one = 1.0, zero = 0.0;
 	int size;
 
 	cudnnHandle_t handle;
 	status = cudnnCreate(&handle);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed1\n");
 
-	cudnnTensorDescriptor_t xdesc, ydesc, bdesc;
+	cudnnTensorDescriptor_t xdesc, ydesc, bdesc, pooldesc;
 	cudnnFilterDescriptor_t wdesc; // CUDNN_TENSOR_NHWC, CUDNN_TENSOR_NCHW
 	status = cudnnCreateTensorDescriptor(&xdesc);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed2\n");
@@ -338,6 +375,10 @@ int kernel_128() {
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed4\n");
 	status = cudnnSetTensor4dDescriptor(ydesc, CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, 128, 14, 14);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed5\n");
+	status = cudnnCreateTensorDescriptor(&pooldesc);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed5.5\n");
+	status = cudnnSetTensor4dDescriptor(pooldesc, CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, 128, 7, 7);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed5.51\n");
 	status = cudnnCreateFilterDescriptor(&wdesc);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed6\n");
 	status = cudnnSetFilter4dDescriptor(wdesc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, 128, 128, 3, 3);
@@ -357,12 +398,19 @@ int kernel_128() {
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed12\n");
 	status = cudnnSetActivationDescriptor(act_desc, CUDNN_ACTIVATION_RELU, CUDNN_NOT_PROPAGATE_NAN, 0);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed13\n");
-
+	cudnnPoolingDescriptor_t poolingDesc;
+	status = cudnnCreatePoolingDescriptor(&poolingDesc);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
+	// CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
+	status = cudnnSetPooling2dDescriptor(poolingDesc, CUDNN_POOLING_MAX,
+		CUDNN_NOT_PROPAGATE_NAN, 2, 2, 0, 0, 2, 2);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed17\n");
 	cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc;
 	status = cudnnCreateTensorDescriptor(&bnScaleBiasMeanVarDesc);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed14\n");
 	status = cudnnSetTensor4dDescriptor(bnScaleBiasMeanVarDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, 128, 1, 1);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed15\n");
+
 
 	cudnnConvolutionFwdAlgo_t algo = (cudnnConvolutionFwdAlgo_t)6;
 
@@ -399,6 +447,11 @@ int kernel_128() {
 		ydesc, output);
 	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed3\n");
 
+	status = cudnnPoolingForward(handle, poolingDesc, &one,
+		ydesc, output, &zero,
+		pooldesc, pooling_output);
+	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
+
 	cudaDeviceSynchronize();
 	nT2_cudnn = getTimeMicroseconds64();
 	printf("cuDNN TotalTime = %d us\n", nT2_cudnn-nT1_cudnn);
@@ -408,9 +461,16 @@ int kernel_128() {
 	s = cudaMemcpy(tmp_cudnn, output, nOutput<<2, cudaMemcpyDeviceToHost);
 	printf("%s\n", cudaGetErrorName(s));
 
+	s = cudaMemcpy(tmp_pooled, pooling_output, nPoolingOutput<<2, cudaMemcpyDeviceToHost);
+	printf("%s\n", cudaGetErrorName(s));
+
+	// make_file("./tensors/pooled.bin", nPoolingOutput, tmp_pooled);
+	// make_file("./tensors/cudnnout.bin", nOutput, tmp_cudnn);
+
 	cudaFree(extra);
 	cudaFree(input);
 	cudaFree(output);
+	cudaFree(pooling_output);
 	cudaFree(l_weights);
 	cudaFree(l_bias);
 
@@ -427,6 +487,8 @@ int kernel_128() {
 	free(eMean);
 	free(eVar);
 	free(input_);
+	status = cudnnDestroy(handle);
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 
 	output_checker(tmp_winograd, tmp_cudnn, 14, 128, 1);
 

@@ -61,3 +61,9 @@ float output_checker(float* A, float* B, int len, int channel, int shift) {
   }
   printf("[max_error: %f][error_cnt: %d]\n", max_error, error_cnt);
 }
+
+void make_file(const char* filename, int quantity, float* content) {
+  FILE * ptr = fopen(filename, "wb");
+  fwrite(content, 4, quantity, ptr);
+  fclose(ptr);
+}

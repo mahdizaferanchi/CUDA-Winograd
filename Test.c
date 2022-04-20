@@ -11,7 +11,7 @@
 #include "util.h"
 
 int main(int argc, char** argv) {
-  int nTest = 100, sum = 0, sum_cudnn = 0, i;
+  int nTest = 1000, sum = 0, sum_cudnn = 0, i;
   cudaSetDevice(0);
 
   int mode = 0;
@@ -54,3 +54,7 @@ int main(int argc, char** argv) {
 
   return 0;
 }
+
+// int main() {
+//   int res = kernel_128();
+// }
