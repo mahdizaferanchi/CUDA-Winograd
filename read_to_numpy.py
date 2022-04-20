@@ -26,3 +26,17 @@ print(pooled[0][:4])
 # print(pooled[66])
 print(pooled.shape)
 print('')
+
+
+At = np.array([[ 1, 1, 1, 1, 1, 0],
+               [ 0, 1,-1, 2,-2, 0],
+               [ 0, 1, 1, 4, 4, 0],
+               [ 0, 1,-1, 8,-8, 1]])
+coefs = []
+
+m = 3
+n = 1
+for i in range(6):
+    for b in range(6):
+        coefs.append(At[m][b]*At[n][i])
+print(coefs)
