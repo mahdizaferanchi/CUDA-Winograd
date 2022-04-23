@@ -120,19 +120,21 @@ __global__ void kernel_128_winograd_BtdB(float *pInputs, float *pOutputs) {
 }
 
 
-__global__ void kernel_128_one_step_AtIA(float *pInputs, float *pBiases, float *pScales, float *pOutputs) {
-	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = blockIdx.z, Inx = threadIdx.x;
-	int c_input = Inx*6 + Iny;
+__global__ void kernel_128_single_step_AtIA(float *pInputs, float *pBiases, float *pScales, float *pOutputs) {
+	// kernel_128_single_step_AtIA <<<dim3(4, 4, 128), dim3(4, 4)>>> (ip, l_bnBias, l_bnScale, output);
+	int Tilex = blockIdx.x, Tiley = blockIdx.y, Outy = threadIdx.y, kz = blockIdx.z, Outx = threadIdx.x;
+	// int c_input = Inx*6 + Iny;
 
-	__shared__ float bias, scale;
-	extern __shared__ float input[];
+	// __shared__ float bias, scale;
+	// extern __shared__ float input[];
 
-	input[c_input] = pInputs[c_input*16*128 + (Tilex*4+Tiley)*128 + kz];
-	bias = pBiases[kz];
-	scale = pScales[kz];
-	__syncthreads();
+	int out_stride_r = 16*128;
+	// input[c_input] = pInputs[c_input*16*128 + (Tilex*4+Tiley)*128 + kz];
+	// bias = pBiases[kz];
+	// scale = pScales[kz];
+	// __syncthreads();
 
-	float coeffs = {
+	float coeffs[16][36] = {
 		{1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 0
 		{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, 0, 2, 2, 2, 2, 2, 0, -2, -2, -2, -2, -2, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 1
 		{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 4, 4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 2
@@ -151,44 +153,45 @@ __global__ void kernel_128_one_step_AtIA(float *pInputs, float *pBiases, float *
 		{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, -1, 1, -8, 8, -1, 0, 8, -8, 64, -64, 8, 0, -8, 8, -64, 64, -8, 0, 1, -1, 8, -8, 1}, // m = 3, n = 3
 	};
 
-	int coeffsIdx = oRow*4 + oCol;	
-	pOuputs[?] = 
-		coeffs[coeffsIdx][0] * pInputs[?] +
-		coeffs[coeffsIdx][1] * pInputs[?] +
-		coeffs[coeffsIdx][2] * pInputs[?] +
-		coeffs[coeffsIdx][3] * pInputs[?] +
-		coeffs[coeffsIdx][4] * pInputs[?] +
-		coeffs[coeffsIdx][5] * pInputs[?] +
-		coeffs[coeffsIdx][6] * pInputs[?] +
-		coeffs[coeffsIdx][7] * pInputs[?] +
-		coeffs[coeffsIdx][8] * pInputs[?] +
-		coeffs[coeffsIdx][9] * pInputs[?] +
-		coeffs[coeffsIdx][10] * pInputs[?] +
-		coeffs[coeffsIdx][11] * pInputs[?] +
-		coeffs[coeffsIdx][12] * pInputs[?] +
-		coeffs[coeffsIdx][14] * pInputs[?] +
-		coeffs[coeffsIdx][15] * pInputs[?] +
-		coeffs[coeffsIdx][16] * pInputs[?] +
-		coeffs[coeffsIdx][17] * pInputs[?] +
-		coeffs[coeffsIdx][18] * pInputs[?] +
-		coeffs[coeffsIdx][19] * pInputs[?] +
-		coeffs[coeffsIdx][20] * pInputs[?] +
-		coeffs[coeffsIdx][21] * pInputs[?] +
-		coeffs[coeffsIdx][22] * pInputs[?] +
-		coeffs[coeffsIdx][23] * pInputs[?] +
-		coeffs[coeffsIdx][24] * pInputs[?] +
-		coeffs[coeffsIdx][25] * pInputs[?] +
-		coeffs[coeffsIdx][26] * pInputs[?] +
-		coeffs[coeffsIdx][27] * pInputs[?] +
-		coeffs[coeffsIdx][28] * pInputs[?] +
-		coeffs[coeffsIdx][29] * pInputs[?] +
-		coeffs[coeffsIdx][30] * pInputs[?] +
-		coeffs[coeffsIdx][31] * pInputs[?] +
-		coeffs[coeffsIdx][32] * pInputs[?] +
-		coeffs[coeffsIdx][33] * pInputs[?] +
-		coeffs[coeffsIdx][34] * pInputs[?] +
-		coeffs[coeffsIdx][35] * pInputs[?] +
-		coeffs[coeffsIdx][36] * pInputs[?];
+	int coeffsIdx = Outx*4 + Outy;
+	int glb_out_idx = (Tilex*4 + Tiley)*128 + kz;	
+	pOutputs[coeffsIdx + kz] = 
+		coeffs[coeffsIdx][0] * pInputs[0*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][1] * pInputs[1*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][2] * pInputs[2*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][3] * pInputs[3*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][4] * pInputs[4*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][5] * pInputs[5*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][6] * pInputs[6*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][7] * pInputs[7*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][8] * pInputs[8*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][9] * pInputs[9*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][10] * pInputs[10*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][11] * pInputs[11*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][12] * pInputs[12*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][14] * pInputs[14*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][14] * pInputs[14*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][15] * pInputs[15*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][16] * pInputs[16*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][17] * pInputs[17*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][18] * pInputs[18*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][19] * pInputs[19*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][20] * pInputs[20*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][21] * pInputs[21*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][22] * pInputs[22*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][23] * pInputs[23*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][24] * pInputs[24*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][25] * pInputs[25*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][26] * pInputs[26*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][27] * pInputs[27*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][28] * pInputs[28*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][29] * pInputs[29*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][30] * pInputs[30*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][31] * pInputs[31*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][32] * pInputs[32*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][33] * pInputs[33*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][34] * pInputs[34*out_stride_r + glb_out_idx] +
+		coeffs[coeffsIdx][35] * pInputs[35*out_stride_r + glb_out_idx];
 }
 
 __global__ void kernel_128_winograd_AtIA(float *pInputs, float *pBiases, float *pScales, float *pOutputs) {
@@ -359,6 +362,7 @@ int kernel_128() {
 	kernel_128_winograd_BtdB <<<dim3(4, 4), dim3(128, 6), (6*6*128)<<2 >>> (input, t_input);
 	kernel_128_OuterProduct_128<<<dim3(36, 2), dim3(128, 8), (8*128 + 64*128 + 8*128)<<2 >>> (t_input, l_weights, ip);
 	kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
+	// kernel_128_single_step_AtIA <<<dim3(4, 4, 128), dim3(4, 4)>>> (ip, l_bnBias, l_bnScale, output);
 	//cudaCheckError();
 	status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
 		winydesc, output, &zero,
