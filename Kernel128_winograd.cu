@@ -200,43 +200,46 @@ __global__ void kernel_128_single_step_AtIA(float *pInputs, float *pBiases, floa
 	// 	At[Outx][3] * At[Outy][5] * pInputs[33*out_stride_c + glb_out_idx] +
 	// 	At[Outx][4] * At[Outy][5] * pInputs[34*out_stride_c + glb_out_idx] +
 	// 	At[Outx][5] * At[Outy][5] * pInputs[35*out_stride_c + glb_out_idx];
-	pOutputs[(((Tilex<<2)+1+Outx)*16 + (Tiley<<2)+1+Outy)*128 + kz] =
-		coeffs[coeffsIdx][0] * pInputs[0*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][1] * pInputs[1*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][2] * pInputs[2*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][3] * pInputs[3*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][4] * pInputs[4*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][5] * pInputs[5*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][6] * pInputs[6*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][7] * pInputs[7*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][8] * pInputs[8*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][9] * pInputs[9*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][10] * pInputs[10*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][11] * pInputs[11*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][12] * pInputs[12*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][14] * pInputs[14*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][14] * pInputs[14*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][15] * pInputs[15*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][16] * pInputs[16*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][17] * pInputs[17*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][18] * pInputs[18*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][19] * pInputs[19*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][20] * pInputs[20*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][21] * pInputs[21*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][22] * pInputs[22*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][23] * pInputs[23*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][24] * pInputs[24*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][25] * pInputs[25*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][26] * pInputs[26*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][27] * pInputs[27*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][28] * pInputs[28*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][29] * pInputs[29*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][30] * pInputs[30*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][31] * pInputs[31*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][32] * pInputs[32*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][33] * pInputs[33*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][34] * pInputs[34*out_stride_c + glb_out_idx] +
-		coeffs[coeffsIdx][35] * pInputs[35*out_stride_c + glb_out_idx];
+	if (!((Tilex == 3 && (Outx == 3 || Outx == 2)) || (Tiley == 3 && (Outy == 3 || Outy == 2)))) {
+		pOutputs[(((Tilex<<2)+1+Outx)*16 + (Tiley<<2)+1+Outy)*128 + kz] =
+			coeffs[coeffsIdx][0] * pInputs[0*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][1] * pInputs[1*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][2] * pInputs[2*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][3] * pInputs[3*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][4] * pInputs[4*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][5] * pInputs[5*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][6] * pInputs[6*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][7] * pInputs[7*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][8] * pInputs[8*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][9] * pInputs[9*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][10] * pInputs[10*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][11] * pInputs[11*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][12] * pInputs[12*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][14] * pInputs[14*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][14] * pInputs[14*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][15] * pInputs[15*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][16] * pInputs[16*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][17] * pInputs[17*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][18] * pInputs[18*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][19] * pInputs[19*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][20] * pInputs[20*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][21] * pInputs[21*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][22] * pInputs[22*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][23] * pInputs[23*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][24] * pInputs[24*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][25] * pInputs[25*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][26] * pInputs[26*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][27] * pInputs[27*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][28] * pInputs[28*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][29] * pInputs[29*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][30] * pInputs[30*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][31] * pInputs[31*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][32] * pInputs[32*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][33] * pInputs[33*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][34] * pInputs[34*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][35] * pInputs[35*out_stride_c + glb_out_idx];
+	}
+
 	// int tmp = c;
 	// for (int i=0; i < 36; ++i) {
 	// 	tmp += coeffs[coeffsIdx][0] * pInputs[i*out_stride_c + glb_out_idx];
@@ -411,8 +414,8 @@ int kernel_128() {
 
 	kernel_128_winograd_BtdB <<<dim3(4, 4), dim3(128, 6), (6*6*128)<<2 >>> (input, t_input);
 	kernel_128_OuterProduct_128<<<dim3(36, 2), dim3(128, 8), (8*128 + 64*128 + 8*128)<<2 >>> (t_input, l_weights, ip);
-	kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
-	// kernel_128_single_step_AtIA <<<dim3(4, 4, 128), dim3(4, 4)>>> (ip, l_bnBias, l_bnScale, output);
+	// kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
+	kernel_128_single_step_AtIA <<<dim3(4, 4, 128), dim3(4, 4)>>> (ip, l_bnBias, l_bnScale, output);
 	//cudaCheckError();
 	// status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
 	// 	winydesc, output, &zero,
