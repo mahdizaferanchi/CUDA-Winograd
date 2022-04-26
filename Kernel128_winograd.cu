@@ -128,75 +128,118 @@ __global__ void kernel_128_single_step_AtIA(float *pInputs, float *pBiases, floa
 	// __shared__ float bias, scale;
 	// extern __shared__ float input[];
 
-	int out_stride_r = 16*128;
+	int out_stride_c = 16*128;
 	// input[c_input] = pInputs[c_input*16*128 + (Tilex*4+Tiley)*128 + kz];
 	// bias = pBiases[kz];
 	// scale = pScales[kz];
 	// __syncthreads();
 
-	// float coeffs[16][36] = {
-	// 	{1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 0
-	// 	{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, 0, 2, 2, 2, 2, 2, 0, -2, -2, -2, -2, -2, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 1
-	// 	{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 4, 4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 2
-	// 	{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, 0, 8, 8, 8, 8, 8, 0, -8, -8, -8, -8, -8, 0, 1, 1, 1, 1, 1, 0}, // m = 0, n = 3
-	// 	{0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 0
-	// 	{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, -1, 1, -2, 2, 0, 0, 2, -2, 4, -4, 0, 0, -2, 2, -4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 1
-	// 	{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 4, -4, 8, -8, 0, 0, 4, -4, 8, -8, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 2
-	// 	{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, -1, 1, -2, 2, 0, 0, 8, -8, 16, -16, 0, 0, -8, 8, -16, 16, 0, 0, 1, -1, 2, -2, 0}, // m = 1, n = 3
-	// 	{0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 0
-	// 	{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, -1, -1, -4, -4, 0, 0, 2, 2, 8, 8, 0, 0, -2, -2, -8, -8, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 1
-	// 	{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 4, 4, 16, 16, 0, 0, 4, 4, 16, 16, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 2
-	// 	{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, -1, -1, -4, -4, 0, 0, 8, 8, 32, 32, 0, 0, -8, -8, -32, -32, 0, 0, 1, 1, 4, 4, 0}, // m = 2, n = 3
-	// 	{0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 0, 0, 0, 0, 0}, // m = 3, n = 0 
-	// 	{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, -1, 1, -8, 8, -1, 0, 2, -2, 16, -16, 2, 0, -2, 2, -16, 16, -2, 0, 0, 0, 0, 0, 0}, // m = 3, n = 1
-	// 	{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 4, -4, 32, -32, 4, 0, 4, -4, 32, -32, 4, 0, 0, 0, 0, 0, 0}, // m = 3, n = 2
-	// 	{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, -1, 1, -8, 8, -1, 0, 8, -8, 64, -64, 8, 0, -8, 8, -64, 64, -8, 0, 1, -1, 8, -8, 1}, // m = 3, n = 3
-	// };
-	float coeffs[1][1] = {{1}};
+	float coeffs[16][36] = {
+		{1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 0
+		{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, 0, 2, 2, 2, 2, 2, 0, -2, -2, -2, -2, -2, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 1
+		{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 4, 4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 2
+		{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, 0, 8, 8, 8, 8, 8, 0, -8, -8, -8, -8, -8, 0, 1, 1, 1, 1, 1, 0}, // m = 0, n = 3
+		{0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 0
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, -1, 1, -2, 2, 0, 0, 2, -2, 4, -4, 0, 0, -2, 2, -4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 1
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 4, -4, 8, -8, 0, 0, 4, -4, 8, -8, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 2
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, -1, 1, -2, 2, 0, 0, 8, -8, 16, -16, 0, 0, -8, 8, -16, 16, 0, 0, 1, -1, 2, -2, 0}, // m = 1, n = 3
+		{0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 0
+		{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, -1, -1, -4, -4, 0, 0, 2, 2, 8, 8, 0, 0, -2, -2, -8, -8, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 1
+		{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 4, 4, 16, 16, 0, 0, 4, 4, 16, 16, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 2
+		{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, -1, -1, -4, -4, 0, 0, 8, 8, 32, 32, 0, 0, -8, -8, -32, -32, 0, 0, 1, 1, 4, 4, 0}, // m = 2, n = 3
+		{0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 0, 0, 0, 0, 0}, // m = 3, n = 0 
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, -1, 1, -8, 8, -1, 0, 2, -2, 16, -16, 2, 0, -2, 2, -16, 16, -2, 0, 0, 0, 0, 0, 0}, // m = 3, n = 1
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 4, -4, 32, -32, 4, 0, 4, -4, 32, -32, 4, 0, 0, 0, 0, 0, 0}, // m = 3, n = 2
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, -1, 1, -8, 8, -1, 0, 8, -8, 64, -64, 8, 0, -8, 8, -64, 64, -8, 0, 1, -1, 8, -8, 1}, // m = 3, n = 3
+	};
+	// float At[4][6] = {{ 1, 1, 1, 1, 1, 0},
+	// 				  { 0, 1,-1, 2,-2, 0},
+	// 				  { 0, 1, 1, 4, 4, 0},
+	// 				  { 0, 1,-1, 8,-8, 1}};
+	// float coeffs[1][1] = {{1}};
 
-	// int coeffsIdx = Outx*4 + Outy;
-	int coeffsIdx = 0;
+	int out_coords = Outx*16 + Outy;
+	int coeffsIdx = Outx*4 + Outy;
+	// coeffs[coeffsIdx][0] * pInputs[0*out_stride_c + glb_out_idx] +
+	// int coeffsIdx = 0;
 	int glb_out_idx = (Tilex*4 + Tiley)*128 + kz;	
-	pOutputs[coeffsIdx + kz] = 
-		coeffs[coeffsIdx][0] * pInputs[0*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[1*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[2*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[3*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[4*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[5*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[6*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[7*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[8*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[9*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[10*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[11*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[12*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[14*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[14*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[15*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[16*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[17*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[18*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[19*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[20*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[21*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[22*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[23*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[24*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[25*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[26*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[27*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[28*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[29*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[30*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[31*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[32*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[33*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[34*out_stride_r + glb_out_idx] +
-		coeffs[coeffsIdx][0] * pInputs[35*out_stride_r + glb_out_idx];
-	// int tmp = 0;
+	// pOutputs[coeffsIdx + kz] = 
+	// 	At[Outx][0] * At[Outy][0] * pInputs[0*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][0] * pInputs[1*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][0] * pInputs[2*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][0] * pInputs[3*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][0] * pInputs[4*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][0] * pInputs[5*out_stride_c + glb_out_idx] +
+	// 	At[Outx][0] * At[Outy][1] * pInputs[6*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][1] * pInputs[7*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][1] * pInputs[8*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][1] * pInputs[9*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][1] * pInputs[10*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][1] * pInputs[11*out_stride_c + glb_out_idx] +
+	// 	At[Outx][0] * At[Outy][2] * pInputs[12*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][2] * pInputs[14*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][2] * pInputs[14*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][2] * pInputs[15*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][2] * pInputs[16*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][2] * pInputs[17*out_stride_c + glb_out_idx] +
+	// 	At[Outx][0] * At[Outy][3] * pInputs[18*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][3] * pInputs[19*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][3] * pInputs[20*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][3] * pInputs[21*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][3] * pInputs[22*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][3] * pInputs[23*out_stride_c + glb_out_idx] +
+	// 	At[Outx][0] * At[Outy][4] * pInputs[24*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][4] * pInputs[25*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][4] * pInputs[26*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][4] * pInputs[27*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][4] * pInputs[28*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][4] * pInputs[29*out_stride_c + glb_out_idx] +
+	// 	At[Outx][0] * At[Outy][5] * pInputs[30*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][5] * pInputs[31*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][5] * pInputs[32*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][5] * pInputs[33*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][5] * pInputs[34*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][5] * pInputs[35*out_stride_c + glb_out_idx];
+	pOutputs[(((Tilex<<2)+1+Outx)*16 + (Tiley<<2)+1+Outy)*128 + kz] =
+		coeffs[coeffsIdx][0] * pInputs[0*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][1] * pInputs[1*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][2] * pInputs[2*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][3] * pInputs[3*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][4] * pInputs[4*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][5] * pInputs[5*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][6] * pInputs[6*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][7] * pInputs[7*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][8] * pInputs[8*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][9] * pInputs[9*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][10] * pInputs[10*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][11] * pInputs[11*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][12] * pInputs[12*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][14] * pInputs[14*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][14] * pInputs[14*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][15] * pInputs[15*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][16] * pInputs[16*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][17] * pInputs[17*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][18] * pInputs[18*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][19] * pInputs[19*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][20] * pInputs[20*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][21] * pInputs[21*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][22] * pInputs[22*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][23] * pInputs[23*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][24] * pInputs[24*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][25] * pInputs[25*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][26] * pInputs[26*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][27] * pInputs[27*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][28] * pInputs[28*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][29] * pInputs[29*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][30] * pInputs[30*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][31] * pInputs[31*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][32] * pInputs[32*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][33] * pInputs[33*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][34] * pInputs[34*out_stride_c + glb_out_idx] +
+		coeffs[coeffsIdx][35] * pInputs[35*out_stride_c + glb_out_idx];
+	// int tmp = c;
 	// for (int i=0; i < 36; ++i) {
-	// 	tmp += coeffs[coeffsIdx][0] * pInputs[i*out_stride_r + glb_out_idx];
+	// 	tmp += coeffs[coeffsIdx][0] * pInputs[i*out_stride_c + glb_out_idx];
 	// }
 	// pOutputs[coeffsIdx + kz] = tmp;
 }
@@ -240,25 +283,25 @@ __global__ void kernel_128_winograd_AtIA(float *pInputs, float *pBiases, float *
 	switch(Iny) {
 		case 0:
 			x = Inx*6;
-			o = scale*(input[x]+input[x+1]+input[x+2]+input[x+3]+input[x+4])+ bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+1)*128 + kz] = o > 0 ? o : 0;
+			o = 1*(input[x]+input[x+1]+input[x+2]+input[x+3]+input[x+4])+ 0;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+1)*128 + kz] = o;
 			break;
 		case 1:
 			x = Inx*6;
-			o = scale*(input[x+1] - input[x+2] + 2*input[x+3] - 2*input[x+4]) + bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+2)*128 + kz] = o > 0 ? o : 0;
+			o = 1*(input[x+1] - input[x+2] + 2*input[x+3] - 2*input[x+4]) + 0;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+2)*128 + kz] = o;
 			break;
 		case 2:
 			if (Tiley == 3) break;
 			x = Inx*6;
-			o = scale*(input[x+1] + input[x+2] + 4*input[x+3] + 4*input[x+4]) + bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+3)*128 + kz] = o > 0 ? o : 0;
+			o = 1*(input[x+1] + input[x+2] + 4*input[x+3] + 4*input[x+4]) + 0;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+3)*128 + kz] = o;
 			break;
 		case 3:
 			if (Tiley == 3) break;
 			x = Inx*6;
-			o = scale*(input[x+1] - input[x+2] + 8*input[x+3] - 8*input[x+4] + input[x+5]) + bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+4)*128 + kz] = o > 0 ? o : 0;
+			o = 1*(input[x+1] - input[x+2] + 8*input[x+3] - 8*input[x+4] + input[x+5]) + 0;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+4)*128 + kz] = o;
 			break;
 	}
 }
@@ -368,13 +411,13 @@ int kernel_128() {
 
 	kernel_128_winograd_BtdB <<<dim3(4, 4), dim3(128, 6), (6*6*128)<<2 >>> (input, t_input);
 	kernel_128_OuterProduct_128<<<dim3(36, 2), dim3(128, 8), (8*128 + 64*128 + 8*128)<<2 >>> (t_input, l_weights, ip);
-	// kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
-	kernel_128_single_step_AtIA <<<dim3(4, 4, 128), dim3(4, 4)>>> (ip, l_bnBias, l_bnScale, output);
+	kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
+	// kernel_128_single_step_AtIA <<<dim3(4, 4, 128), dim3(4, 4)>>> (ip, l_bnBias, l_bnScale, output);
 	//cudaCheckError();
-	status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
-		winydesc, output, &zero,
-		winpooldesc, pooling_output);
-	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
+	// status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
+	// 	winydesc, output, &zero,
+	// 	winpooldesc, pooling_output);
+	// if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
 	cudaDeviceSynchronize();
 	
 	nT2 = getTimeMicroseconds64();
@@ -518,21 +561,21 @@ int kernel_128() {
 		ydesc, output);
 	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed1\n");
 
-	status = cudnnBatchNormalizationForwardInference(handle, CUDNN_BATCHNORM_SPATIAL,
-		&one, &zero, 
-		ydesc, output, ydesc, output,
-		bnScaleBiasMeanVarDesc, l_bnScale, l_bnBias, l_eMean, l_eVar, CUDNN_BN_MIN_EPSILON);
-	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed2\n");
+	// status = cudnnBatchNormalizationForwardInference(handle, CUDNN_BATCHNORM_SPATIAL,
+	// 	&one, &zero, 
+	// 	ydesc, output, ydesc, output,
+	// 	bnScaleBiasMeanVarDesc, l_bnScale, l_bnBias, l_eMean, l_eVar, CUDNN_BN_MIN_EPSILON);
+	// if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed2\n");
 
-	status = cudnnActivationForward(handle, act_desc, &one,
-		ydesc, output, &zero,
-		ydesc, output);
-	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed3\n");
+	// status = cudnnActivationForward(handle, act_desc, &one,
+	// 	ydesc, output, &zero,
+	// 	ydesc, output);
+	// if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed3\n");
 
-	status = cudnnPoolingForward(handle, poolingDesc, &one,
-		ydesc, output, &zero,
-		pooldesc, pooling_output);
-	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
+	// status = cudnnPoolingForward(handle, poolingDesc, &one,
+	// 	ydesc, output, &zero,
+	// 	pooldesc, pooling_output);
+	// if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
 
 	cudaDeviceSynchronize();
 	nT2_cudnn = getTimeMicroseconds64();
