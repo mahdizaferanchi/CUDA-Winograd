@@ -502,3 +502,130 @@ int kernel_128() {
     return ((nT2-nT1) << 16) | (nT2_cudnn-nT1_cudnn);
     // interesting shifting menouver to return to numbers that are definitly smaller than 2^16
 }
+
+__global__ void kernel_128_single_step_AtIA(float *pInputs, float *pBiases, float *pScales, float *pOutputs) {
+	// kernel_128_single_step_AtIA <<<dim3(4, 4, 128), dim3(4, 4)>>> (ip, l_bnBias, l_bnScale, output);
+	int Tilex = blockIdx.x, Tiley = blockIdx.y, Outy = threadIdx.y, kz = blockIdx.z, Outx = threadIdx.x;
+	// int c_input = Inx*6 + Iny;
+
+	// __shared__ float bias, scale;
+	// extern __shared__ float input[];
+
+	int out_stride_c = 16*128;
+	// input[c_input] = pInputs[c_input*16*128 + (Tilex*4+Tiley)*128 + kz];
+	// bias = pBiases[kz];
+	// scale = pScales[kz];
+	// __syncthreads();
+
+	float coeffs[16][36] = {
+		{1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 0
+		{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, 0, 2, 2, 2, 2, 2, 0, -2, -2, -2, -2, -2, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 1
+		{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 4, 4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 0, n = 2
+		{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, 0, 8, 8, 8, 8, 8, 0, -8, -8, -8, -8, -8, 0, 1, 1, 1, 1, 1, 0}, // m = 0, n = 3
+		{0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 0
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, -1, 1, -2, 2, 0, 0, 2, -2, 4, -4, 0, 0, -2, 2, -4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 1
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, 1, -1, 2, -2, 0, 0, 4, -4, 8, -8, 0, 0, 4, -4, 8, -8, 0, 0, 0, 0, 0, 0, 0}, // m = 1, n = 2
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 2, -2, 0, 0, -1, 1, -2, 2, 0, 0, 8, -8, 16, -16, 0, 0, -8, 8, -16, 16, 0, 0, 1, -1, 2, -2, 0}, // m = 1, n = 3
+		{0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 0
+		{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, -1, -1, -4, -4, 0, 0, 2, 2, 8, 8, 0, 0, -2, -2, -8, -8, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 1
+		{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, 1, 1, 4, 4, 0, 0, 4, 4, 16, 16, 0, 0, 4, 4, 16, 16, 0, 0, 0, 0, 0, 0, 0}, // m = 2, n = 2
+		{0, 0, 0, 0, 0, 0, 0, 1, 1, 4, 4, 0, 0, -1, -1, -4, -4, 0, 0, 8, 8, 32, 32, 0, 0, -8, -8, -32, -32, 0, 0, 1, 1, 4, 4, 0}, // m = 2, n = 3
+		{0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 0, 0, 0, 0, 0}, // m = 3, n = 0 
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, -1, 1, -8, 8, -1, 0, 2, -2, 16, -16, 2, 0, -2, 2, -16, 16, -2, 0, 0, 0, 0, 0, 0}, // m = 3, n = 1
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, 1, -1, 8, -8, 1, 0, 4, -4, 32, -32, 4, 0, 4, -4, 32, -32, 4, 0, 0, 0, 0, 0, 0}, // m = 3, n = 2
+		{0, 0, 0, 0, 0, 0, 0, 1, -1, 8, -8, 1, 0, -1, 1, -8, 8, -1, 0, 8, -8, 64, -64, 8, 0, -8, 8, -64, 64, -8, 0, 1, -1, 8, -8, 1}, // m = 3, n = 3
+	};
+	// float At[4][6] = {{ 1, 1, 1, 1, 1, 0},
+	// 				  { 0, 1,-1, 2,-2, 0},
+	// 				  { 0, 1, 1, 4, 4, 0},
+	// 				  { 0, 1,-1, 8,-8, 1}};
+	// float coeffs[1][1] = {{1}};
+
+	int out_coords = Outx*16 + Outy;
+	int coeffsIdx = Outx*4 + Outy;
+	// coeffs[coeffsIdx][0] * pInputs[0*out_stride_c + glb_out_idx] +
+	// int coeffsIdx = 0;
+	int glb_out_idx = (Tilex*4 + Tiley)*128 + kz;	
+	// pOutputs[coeffsIdx + kz] = 
+	// 	At[Outx][0] * At[Outy][0] * pInputs[0*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][0] * pInputs[1*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][0] * pInputs[2*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][0] * pInputs[3*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][0] * pInputs[4*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][0] * pInputs[5*out_stride_c + glb_out_idx] +
+	// 	At[Outx][0] * At[Outy][1] * pInputs[6*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][1] * pInputs[7*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][1] * pInputs[8*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][1] * pInputs[9*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][1] * pInputs[10*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][1] * pInputs[11*out_stride_c + glb_out_idx] +
+	// 	At[Outx][0] * At[Outy][2] * pInputs[12*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][2] * pInputs[14*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][2] * pInputs[14*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][2] * pInputs[15*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][2] * pInputs[16*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][2] * pInputs[17*out_stride_c + glb_out_idx] +
+	// 	At[Outx][0] * At[Outy][3] * pInputs[18*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][3] * pInputs[19*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][3] * pInputs[20*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][3] * pInputs[21*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][3] * pInputs[22*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][3] * pInputs[23*out_stride_c + glb_out_idx] +
+	// 	At[Outx][0] * At[Outy][4] * pInputs[24*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][4] * pInputs[25*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][4] * pInputs[26*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][4] * pInputs[27*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][4] * pInputs[28*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][4] * pInputs[29*out_stride_c + glb_out_idx] +
+	// 	At[Outx][0] * At[Outy][5] * pInputs[30*out_stride_c + glb_out_idx] +
+	// 	At[Outx][1] * At[Outy][5] * pInputs[31*out_stride_c + glb_out_idx] +
+	// 	At[Outx][2] * At[Outy][5] * pInputs[32*out_stride_c + glb_out_idx] +
+	// 	At[Outx][3] * At[Outy][5] * pInputs[33*out_stride_c + glb_out_idx] +
+	// 	At[Outx][4] * At[Outy][5] * pInputs[34*out_stride_c + glb_out_idx] +
+	// 	At[Outx][5] * At[Outy][5] * pInputs[35*out_stride_c + glb_out_idx];
+	if (!((Tilex == 3 && (Outx == 3 || Outx == 2)) || (Tiley == 3 && (Outy == 3 || Outy == 2)))) {
+		pOutputs[(((Tilex<<2)+1+Outx)*16 + (Tiley<<2)+1+Outy)*128 + kz] =
+			coeffs[coeffsIdx][0] * pInputs[0*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][1] * pInputs[1*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][2] * pInputs[2*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][3] * pInputs[3*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][4] * pInputs[4*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][5] * pInputs[5*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][6] * pInputs[6*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][7] * pInputs[7*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][8] * pInputs[8*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][9] * pInputs[9*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][10] * pInputs[10*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][11] * pInputs[11*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][12] * pInputs[12*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][14] * pInputs[14*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][14] * pInputs[14*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][15] * pInputs[15*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][16] * pInputs[16*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][17] * pInputs[17*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][18] * pInputs[18*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][19] * pInputs[19*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][20] * pInputs[20*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][21] * pInputs[21*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][22] * pInputs[22*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][23] * pInputs[23*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][24] * pInputs[24*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][25] * pInputs[25*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][26] * pInputs[26*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][27] * pInputs[27*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][28] * pInputs[28*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][29] * pInputs[29*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][30] * pInputs[30*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][31] * pInputs[31*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][32] * pInputs[32*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][33] * pInputs[33*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][34] * pInputs[34*out_stride_c + glb_out_idx] +
+			coeffs[coeffsIdx][35] * pInputs[35*out_stride_c + glb_out_idx];
+	}
+
+	// int tmp = c;
+	// for (int i=0; i < 36; ++i) {
+	// 	tmp += coeffs[coeffsIdx][0] * pInputs[i*out_stride_c + glb_out_idx];
+	// }
+	// pOutputs[coeffsIdx + kz] = tmp;
+}
