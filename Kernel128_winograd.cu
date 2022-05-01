@@ -119,12 +119,14 @@ __global__ void kernel_128_winograd_BtdB(float *pInputs, float *pOutputs) {
 	}
 }
 
-__global__ void kernel_128_winograd_AtIA(float *pInputs, float *pBiases, float *pScales, float *pOutputs) {
+__global__ void kernel_128_winograd_AtIA(float *pInputs, float *pBiases, float *pScales, float *pOutputs) { 
 	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = blockIdx.z, Inx = threadIdx.x;
+	// int Tilex = threadIdx.x, Tiley = threadIdx.y, Iny = blockIdx.y, kz = blockIdx.z, Inx = blockIdx.x;
+
 	int c_input = Inx*6 + Iny;
 
 	__shared__ float bias, scale;
-	extern __shared__ float input[];
+	 extern __shared__ float input[];
 
 	input[c_input] = pInputs[c_input*16*128 + (Tilex*4+Tiley)*128 + kz];
 	bias = pBiases[kz];
@@ -158,25 +160,25 @@ __global__ void kernel_128_winograd_AtIA(float *pInputs, float *pBiases, float *
 	switch(Iny) {
 		case 0:
 			x = Inx*6;
-			o = 1*(input[x]+input[x+1]+input[x+2]+input[x+3]+input[x+4])+ 0;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+1)*128 + kz] = o;
+			o = scale*(input[x]+input[x+1]+input[x+2]+input[x+3]+input[x+4])+ bias;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+1)*128 + kz] = o > 0 ? o : 0;
 			break;
 		case 1:
 			x = Inx*6;
-			o = 1*(input[x+1] - input[x+2] + 2*input[x+3] - 2*input[x+4]) + 0;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+2)*128 + kz] = o;
+			o = scale*(input[x+1] - input[x+2] + 2*input[x+3] - 2*input[x+4]) + bias;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+2)*128 + kz] = o > 0 ? o : 0;
 			break;
 		case 2:
 			if (Tiley == 3) break;
 			x = Inx*6;
-			o = 1*(input[x+1] + input[x+2] + 4*input[x+3] + 4*input[x+4]) + 0;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+3)*128 + kz] = o;
+			o = scale*(input[x+1] + input[x+2] + 4*input[x+3] + 4*input[x+4]) + bias;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+3)*128 + kz] = o > 0 ? o : 0;
 			break;
 		case 3:
 			if (Tiley == 3) break;
 			x = Inx*6;
-			o = 1*(input[x+1] - input[x+2] + 8*input[x+3] - 8*input[x+4] + input[x+5]) + 0;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+4)*128 + kz] = o;
+			o = scale*(input[x+1] - input[x+2] + 8*input[x+3] - 8*input[x+4] + input[x+5]) + bias;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+4)*128 + kz] = o > 0 ? o : 0;
 			break;
 	}
 }
@@ -287,7 +289,10 @@ int kernel_128() {
 	kernel_128_winograd_BtdB <<<dim3(4, 4), dim3(128, 6), (6*6*128)<<2 >>> (input, t_input);
 	kernel_128_OuterProduct_128<<<dim3(36, 2), dim3(128, 8), (8*128 + 64*128 + 8*128)<<2 >>> (t_input, l_weights, ip);
 	kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
+	// kernel_128_winograd_AtIA <<<dim3(6, 6, 128), dim3(4, 4), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
+
 	// kernel_128_single_step_AtIA <<<dim3(4, 4, 128), dim3(4, 4)>>> (ip, l_bnBias, l_bnScale, output);
+
 	// cudaCheckError();
 	// status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
 	// 	winydesc, output, &zero,
@@ -436,16 +441,16 @@ int kernel_128() {
 		ydesc, output);
 	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed1\n");
 
-	// status = cudnnBatchNormalizationForwardInference(handle, CUDNN_BATCHNORM_SPATIAL,
-	// 	&one, &zero, 
-	// 	ydesc, output, ydesc, output,
-	// 	bnScaleBiasMeanVarDesc, l_bnScale, l_bnBias, l_eMean, l_eVar, CUDNN_BN_MIN_EPSILON);
-	// if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed2\n");
+	status = cudnnBatchNormalizationForwardInference(handle, CUDNN_BATCHNORM_SPATIAL,
+		&one, &zero, 
+		ydesc, output, ydesc, output,
+		bnScaleBiasMeanVarDesc, l_bnScale, l_bnBias, l_eMean, l_eVar, CUDNN_BN_MIN_EPSILON);
+	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed2\n");
 
-	// status = cudnnActivationForward(handle, act_desc, &one,
-	// 	ydesc, output, &zero,
-	// 	ydesc, output);
-	// if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed3\n");
+	status = cudnnActivationForward(handle, act_desc, &one,
+		ydesc, output, &zero,
+		ydesc, output);
+	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed3\n");
 
 	// status = cudnnPoolingForward(handle, poolingDesc, &one,
 	// 	ydesc, output, &zero,
