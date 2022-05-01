@@ -286,9 +286,9 @@ int kernel_128() {
 
 	kernel_128_winograd_BtdB <<<dim3(4, 4), dim3(128, 6), (6*6*128)<<2 >>> (input, t_input);
 	kernel_128_OuterProduct_128<<<dim3(36, 2), dim3(128, 8), (8*128 + 64*128 + 8*128)<<2 >>> (t_input, l_weights, ip);
-	// kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
-	kernel_128_single_step_AtIA <<<dim3(4, 4, 128), dim3(4, 4)>>> (ip, l_bnBias, l_bnScale, output);
-	//cudaCheckError();
+	kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
+	// kernel_128_single_step_AtIA <<<dim3(4, 4, 128), dim3(4, 4)>>> (ip, l_bnBias, l_bnScale, output);
+	// cudaCheckError();
 	// status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
 	// 	winydesc, output, &zero,
 	// 	winpooldesc, pooling_output);
@@ -305,8 +305,8 @@ int kernel_128() {
 	s = cudaMemcpy(tmp_winograd_pooled, pooling_output, nPoolingOutput<<2, cudaMemcpyDeviceToHost);
 	printf("%s\n", cudaGetErrorName(s));
 	//cudaCheckError();
-	make_file("./tensors/winograd_out.bin", nOutput, tmp_winograd);
-	make_file("./tensors/winograd_out_pooled.bin", nPoolingOutput, tmp_winograd_pooled);
+	// make_file("./tensors/winograd_out.bin", nOutput, tmp_winograd);
+	// make_file("./tensors/winograd_out_pooled.bin", nPoolingOutput, tmp_winograd_pooled);
 
 	cudaFree(t_input);
 	cudaFree(output);
@@ -464,8 +464,8 @@ int kernel_128() {
 	s = cudaMemcpy(tmp_pooled, pooling_output, nPoolingOutput<<2, cudaMemcpyDeviceToHost);
 	printf("%s\n", cudaGetErrorName(s));
 
-	make_file("./tensors/pooled.bin", nPoolingOutput, tmp_pooled);
-	make_file("./tensors/cudnnout.bin", nOutput, tmp_cudnn);
+	// make_file("./tensors/pooled.bin", nPoolingOutput, tmp_pooled);
+	// make_file("./tensors/cudnnout.bin", nOutput, tmp_cudnn);
 
 	cudaFree(extra);
 	cudaFree(input);
