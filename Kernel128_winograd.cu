@@ -154,58 +154,59 @@ __global__ void kernel_128_winograd_AtIA(float *pInputs, float *pBiases, float *
 	input[c_input] = tmp;
 	__syncthreads();
 
-	if (Inx >= 3 || Inx == 1 || (Tilex == 3 && Inx > 1)) return;
-	int x0, x1;
-	float o, o00, o01, o10, o11;
-	switch(Iny) {
-		case 0:
-			x0 = Inx*6, x1 = (Inx+1)*6;
-			o00 = scale*(input[x0]+input[x0+1]+input[x0+2]+input[x0+3]+input[x0+4])+bias;
-			o01 = scale*(input[x0+1] - input[x0+2] + 2*input[x0+3] - 2*input[x0+4])+bias;
-			o10 = scale*(input[x1]+input[x1+1]+input[x1+2]+input[x1+3]+input[x1+4])+bias;
-			o11 = scale*(input[x1+1] - input[x1+2] + 2*input[x1+3] - 2*input[x1+4])+bias;
-			o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
-			pOutputs[(((Tilex<<1)+1+Inx/2)*16 + (Tiley<<1)+1)*128 + kz] = o;
-			break;
-		case 2:
-			if (Tiley == 3) break;
-			x0 = Inx*6, x1 = (Inx+1)*6;
-			o00 = scale*(input[x0+1] + input[x0+2] + 4*input[x0+3] + 4*input[x0+4])+bias;
-			o01 = scale*(input[x0+1] - input[x0+2] + 8*input[x0+3] - 8*input[x0+4] + input[x0+5])+bias;
-			o10 = scale*(input[x1+1] + input[x1+2] + 4*input[x1+3] + 4*input[x1+4])+bias;
-			o11 = scale*(input[x1+1] - input[x1+2] + 8*input[x1+3] - 8*input[x1+4] + input[x1+5])+bias;
-			o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
-			pOutputs[(((Tilex<<1)+1+Inx/2)*16 + (Tiley<<1)+2)*128 + kz] = o;
-			break;
-	}
-	// if (Inx > 3 || (Tilex == 3 && Inx > 1)) return;
-
-	// int x;
-	// float o;
+	// if (Inx >= 3 || Inx == 1 || (Tilex == 3 && Inx > 1)) return;
+	// int x0, x1;
+	// float o, o00, o01, o10, o11;
 	// switch(Iny) {
 	// 	case 0:
-	// 		x = Inx*6;
-	// 		o = scale*(input[x]+input[x+1]+input[x+2]+input[x+3]+input[x+4])+ bias;
-	// 		pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+1)*128 + kz] = o > 0 ? o : 0;
-	// 		break;
-	// 	case 1:
-	// 		x = Inx*6;
-	// 		o = scale*(input[x+1] - input[x+2] + 2*input[x+3] - 2*input[x+4]) + bias;
-	// 		pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+2)*128 + kz] = o > 0 ? o : 0;
+	// 		x0 = Inx*6, x1 = (Inx+1)*6;
+	// 		o00 = scale*(input[x0]+input[x0+1]+input[x0+2]+input[x0+3]+input[x0+4])+bias;
+	// 		o01 = scale*(input[x0+1] - input[x0+2] + 2*input[x0+3] - 2*input[x0+4])+bias;
+	// 		o10 = scale*(input[x1]+input[x1+1]+input[x1+2]+input[x1+3]+input[x1+4])+bias;
+	// 		o11 = scale*(input[x1+1] - input[x1+2] + 2*input[x1+3] - 2*input[x1+4])+bias;
+	// 		o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
+	// 		pOutputs[(((Tilex<<1)+1+Inx/2)*9 + (Tiley<<1)+1)*128 + kz] = o;
 	// 		break;
 	// 	case 2:
 	// 		if (Tiley == 3) break;
-	// 		x = Inx*6;
-	// 		o = scale*(input[x+1] + input[x+2] + 4*input[x+3] + 4*input[x+4]) + bias;
-	// 		pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+3)*128 + kz] = o > 0 ? o : 0;
-	// 		break;
-	// 	case 3:
-	// 		if (Tiley == 3) break;
-	// 		x = Inx*6;
-	// 		o = scale*(input[x+1] - input[x+2] + 8*input[x+3] - 8*input[x+4] + input[x+5]) + bias;
-	// 		pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+4)*128 + kz] = o > 0 ? o : 0;
+	// 		x0 = Inx*6, x1 = (Inx+1)*6;
+	// 		o00 = scale*(input[x0+1] + input[x0+2] + 4*input[x0+3] + 4*input[x0+4])+bias;
+	// 		o01 = scale*(input[x0+1] - input[x0+2] + 8*input[x0+3] - 8*input[x0+4] + input[x0+5])+bias;
+	// 		o10 = scale*(input[x1+1] + input[x1+2] + 4*input[x1+3] + 4*input[x1+4])+bias;
+	// 		o11 = scale*(input[x1+1] - input[x1+2] + 8*input[x1+3] - 8*input[x1+4] + input[x1+5])+bias;
+	// 		o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
+	// 		pOutputs[(((Tilex<<1)+1+Inx/2)*9 + (Tiley<<1)+2)*128 + kz] = o;
 	// 		break;
 	// }
+
+	if (Inx > 3 || (Tilex == 3 && Inx > 1)) return;
+
+	int x;
+	float o;
+	switch(Iny) {
+		case 0:
+			x = Inx*6;
+			o = scale*(input[x]+input[x+1]+input[x+2]+input[x+3]+input[x+4])+ bias;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+1)*128 + kz] = o > 0 ? o : 0;
+			break;
+		case 1:
+			x = Inx*6;
+			o = scale*(input[x+1] - input[x+2] + 2*input[x+3] - 2*input[x+4]) + bias;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+2)*128 + kz] = o > 0 ? o : 0;
+			break;
+		case 2:
+			if (Tiley == 3) break;
+			x = Inx*6;
+			o = scale*(input[x+1] + input[x+2] + 4*input[x+3] + 4*input[x+4]) + bias;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+3)*128 + kz] = o > 0 ? o : 0;
+			break;
+		case 3:
+			if (Tiley == 3) break;
+			x = Inx*6;
+			o = scale*(input[x+1] - input[x+2] + 8*input[x+3] - 8*input[x+4] + input[x+5]) + bias;
+			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+4)*128 + kz] = o > 0 ? o : 0;
+			break;
+	}
 }
 
 
@@ -314,15 +315,12 @@ int kernel_128() {
 	kernel_128_winograd_BtdB <<<dim3(4, 4), dim3(128, 6), (6*6*128)<<2 >>> (input, t_input);
 	kernel_128_OuterProduct_128<<<dim3(36, 2), dim3(128, 8), (8*128 + 64*128 + 8*128)<<2 >>> (t_input, l_weights, ip);
 	kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
-	// kernel_128_winograd_AtIA <<<dim3(6, 6, 128), dim3(4, 4), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
-
-	// kernel_128_single_step_AtIA <<<dim3(4, 4, 128), dim3(4, 4)>>> (ip, l_bnBias, l_bnScale, output);
 
 	// cudaCheckError();
-	// status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
-	// 	winydesc, output, &zero,
-	// 	winpooldesc, pooling_output);
-	// if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
+	status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
+		winydesc, output, &zero,
+		winpooldesc, pooling_output);
+	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
 	cudaDeviceSynchronize();
 	
 	nT2 = getTimeMicroseconds64();
@@ -335,8 +333,8 @@ int kernel_128() {
 	s = cudaMemcpy(tmp_winograd_pooled, pooling_output, nPoolingOutput<<2, cudaMemcpyDeviceToHost);
 	printf("%s\n", cudaGetErrorName(s));
 	//cudaCheckError();
-	make_file("./tensors/winograd_out.bin", nOutput, tmp_winograd);
-	make_file("./tensors/winograd_out_pooled.bin", nPoolingOutput, tmp_winograd_pooled);
+	// make_file("./tensors/winograd_out.bin", nOutput, tmp_winograd);
+	// make_file("./tensors/winograd_out_pooled.bin", nPoolingOutput, tmp_winograd_pooled);
 
 	cudaFree(t_input);
 	cudaFree(output);
@@ -494,8 +492,8 @@ int kernel_128() {
 	s = cudaMemcpy(tmp_pooled, pooling_output, nPoolingOutput<<2, cudaMemcpyDeviceToHost);
 	printf("%s\n", cudaGetErrorName(s));
 
-	make_file("./tensors/pooled.bin", nPoolingOutput, tmp_pooled);
-	make_file("./tensors/cudnnout.bin", nOutput, tmp_cudnn);
+	// make_file("./tensors/pooled.bin", nPoolingOutput, tmp_pooled);
+	// make_file("./tensors/cudnnout.bin", nOutput, tmp_cudnn);
 
 	cudaFree(extra);
 	cudaFree(input);
@@ -520,7 +518,8 @@ int kernel_128() {
 	status = cudnnDestroy(handle);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 
-	output_checker(tmp_winograd, tmp_cudnn, 14, 128, 1);
+	// output_checker(tmp_winograd, tmp_cudnn, 14, 128, 1);
+	output_checker(tmp_winograd_pooled, tmp_pooled, 7, 128, 1);
 
 	return ((nT2-nT1) << 16) | (nT2_cudnn-nT1_cudnn);
 }
