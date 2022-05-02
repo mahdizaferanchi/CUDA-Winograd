@@ -153,34 +153,58 @@ __global__ void kernel_128_winograd_AtIA(float *pInputs, float *pBiases, float *
 	input[c_input] = tmp;
 	__syncthreads();
 
-	if (Inx > 3 || (Tilex == 3 && Inx > 1)) return;
-	
-	int x;
-	float o;
+	if (Inx >= 3 || Inx == 1 || (Tilex == 3 && Inx > 1)) return;
+	int x0, x1;
+	float o, o00, o01, o10, o11;
 	switch(Iny) {
 		case 0:
-			x = Inx*6;
-			o = scale*(input[x]+input[x+1]+input[x+2]+input[x+3]+input[x+4])+ bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+1)*128 + kz] = o > 0 ? o : 0;
-			break;
-		case 1:
-			x = Inx*6;
-			o = scale*(input[x+1] - input[x+2] + 2*input[x+3] - 2*input[x+4]) + bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+2)*128 + kz] = o > 0 ? o : 0;
+			x0 = Inx*6, x1 = (Inx+1)*6;
+			o00 = (input[x0]+input[x0+1]+input[x0+2]+input[x0+3]+input[x0+4]);
+			o01 = (input[x0+1] - input[x0+2] + 2*input[x0+3] - 2*input[x0+4]);
+			o10 = (input[x1]+input[x1+1]+input[x1+2]+input[x1+3]+input[x1+4]);
+			o11 = (input[x1+1] - input[x1+2] + 2*input[x1+3] - 2*input[x1+4]);
+			o = scale*(0.25)*(o00+o01+o10+o11)+bias;
+			pOutputs[(((Tilex<<2)+1+Inx/2)*16 + (Tiley<<2)+1)*128 + kz] = o > 0 ? o : 0;
 			break;
 		case 2:
 			if (Tiley == 3) break;
-			x = Inx*6;
-			o = scale*(input[x+1] + input[x+2] + 4*input[x+3] + 4*input[x+4]) + bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+3)*128 + kz] = o > 0 ? o : 0;
-			break;
-		case 3:
-			if (Tiley == 3) break;
-			x = Inx*6;
-			o = scale*(input[x+1] - input[x+2] + 8*input[x+3] - 8*input[x+4] + input[x+5]) + bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+4)*128 + kz] = o > 0 ? o : 0;
+			x0 = Inx*6, x1 = (Inx+1)*6;
+			o00 = (input[x0+1] + input[x0+2] + 4*input[x0+3] + 4*input[x0+4]);
+			o01 = (input[x0+1] - input[x0+2] + 8*input[x0+3] - 8*input[x0+4] + input[x0+5]);
+			o10 = (input[x1+1] + input[x1+2] + 4*input[x1+3] + 4*input[x1+4]);
+			o11 = (input[x1+1] - input[x1+2] + 8*input[x1+3] - 8*input[x1+4] + input[x1+5]);
+			o = scale*(0.25)*(o00+o01+o10+o11)+bias;
+			pOutputs[(((Tilex<<2)+1+Inx/2)*16 + (Tiley<<2)+2)*128 + kz] = o > 0 ? o : 0;
 			break;
 	}
+	// if (Inx > 3 || (Tilex == 3 && Inx > 1)) return;
+
+	// int x;
+	// float o;
+	// switch(Iny) {
+	// 	case 0:
+	// 		x = Inx*6;
+	// 		o = scale*(input[x]+input[x+1]+input[x+2]+input[x+3]+input[x+4])+ bias;
+	// 		pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+1)*128 + kz] = o > 0 ? o : 0;
+	// 		break;
+	// 	case 1:
+	// 		x = Inx*6;
+	// 		o = scale*(input[x+1] - input[x+2] + 2*input[x+3] - 2*input[x+4]) + bias;
+	// 		pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+2)*128 + kz] = o > 0 ? o : 0;
+	// 		break;
+	// 	case 2:
+	// 		if (Tiley == 3) break;
+	// 		x = Inx*6;
+	// 		o = scale*(input[x+1] + input[x+2] + 4*input[x+3] + 4*input[x+4]) + bias;
+	// 		pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+3)*128 + kz] = o > 0 ? o : 0;
+	// 		break;
+	// 	case 3:
+	// 		if (Tiley == 3) break;
+	// 		x = Inx*6;
+	// 		o = scale*(input[x+1] - input[x+2] + 8*input[x+3] - 8*input[x+4] + input[x+5]) + bias;
+	// 		pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+4)*128 + kz] = o > 0 ? o : 0;
+	// 		break;
+	// }
 }
 
 
@@ -269,7 +293,7 @@ int kernel_128() {
 	status = cudnnCreatePoolingDescriptor(&winpoolingDesc);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 	// CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
-	status = cudnnSetPooling2dDescriptor(winpoolingDesc, CUDNN_POOLING_MAX,
+	status = cudnnSetPooling2dDescriptor(winpoolingDesc, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
 		CUDNN_NOT_PROPAGATE_NAN, 2, 2, 1, 1, 2, 2);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed17\n");
 
@@ -310,8 +334,8 @@ int kernel_128() {
 	s = cudaMemcpy(tmp_winograd_pooled, pooling_output, nPoolingOutput<<2, cudaMemcpyDeviceToHost);
 	printf("%s\n", cudaGetErrorName(s));
 	//cudaCheckError();
-	// make_file("./tensors/winograd_out.bin", nOutput, tmp_winograd);
-	// make_file("./tensors/winograd_out_pooled.bin", nPoolingOutput, tmp_winograd_pooled);
+	make_file("./tensors/winograd_out.bin", nOutput, tmp_winograd);
+	make_file("./tensors/winograd_out_pooled.bin", nPoolingOutput, tmp_winograd_pooled);
 
 	cudaFree(t_input);
 	cudaFree(output);
@@ -407,7 +431,7 @@ int kernel_128() {
 	status = cudnnCreatePoolingDescriptor(&poolingDesc);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 	// CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
-	status = cudnnSetPooling2dDescriptor(poolingDesc, CUDNN_POOLING_MAX,
+	status = cudnnSetPooling2dDescriptor(poolingDesc, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
 		CUDNN_NOT_PROPAGATE_NAN, 2, 2, 0, 0, 2, 2);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed17\n");
 	cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc;
@@ -452,10 +476,10 @@ int kernel_128() {
 		ydesc, output);
 	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed3\n");
 
-	// status = cudnnPoolingForward(handle, poolingDesc, &one,
-	// 	ydesc, output, &zero,
-	// 	pooldesc, pooling_output);
-	// if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
+	status = cudnnPoolingForward(handle, poolingDesc, &one,
+		ydesc, output, &zero,
+		pooldesc, pooling_output);
+	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
 
 	cudaDeviceSynchronize();
 	nT2_cudnn = getTimeMicroseconds64();
@@ -469,8 +493,8 @@ int kernel_128() {
 	s = cudaMemcpy(tmp_pooled, pooling_output, nPoolingOutput<<2, cudaMemcpyDeviceToHost);
 	printf("%s\n", cudaGetErrorName(s));
 
-	// make_file("./tensors/pooled.bin", nPoolingOutput, tmp_pooled);
-	// make_file("./tensors/cudnnout.bin", nOutput, tmp_cudnn);
+	make_file("./tensors/pooled.bin", nPoolingOutput, tmp_pooled);
+	make_file("./tensors/cudnnout.bin", nOutput, tmp_cudnn);
 
 	cudaFree(extra);
 	cudaFree(input);
