@@ -287,24 +287,24 @@ __global__ void kernel_128_winograd_AtIA_maxp(float *pInputs, float *pBiases, fl
 	switch(Iny) {
 		case 0:
 			x0 = Inx*6, x1 = (Inx+1)*6;
-			o00 = scale*(input[x0]+input[x0+1]+input[x0+2]+input[x0+3]+input[x0+4])+bias;
-			o01 = scale*(input[x0+1] - input[x0+2] + 2*input[x0+3] - 2*input[x0+4])+bias;
-			o10 = scale*(input[x1]+input[x1+1]+input[x1+2]+input[x1+3]+input[x1+4])+bias;
-			o11 = scale*(input[x1+1] - input[x1+2] + 2*input[x1+3] - 2*input[x1+4])+bias;
+			o00 = input[x0]+input[x0+1]+input[x0+2]+input[x0+3]+input[x0+4];
+			o01 = input[x0+1] - input[x0+2] + 2*input[x0+3] - 2*input[x0+4];
+			o10 = input[x1]+input[x1+1]+input[x1+2]+input[x1+3]+input[x1+4];
+			o11 = input[x1+1] - input[x1+2] + 2*input[x1+3] - 2*input[x1+4];
 			// o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
-			o = fmaxf(fmaxf(relu(o00), relu(o01)), fmaxf(relu(o10), relu(o11)));
-			pOutputs[(((Tilex<<1)+1+Inx/2)*9 + (Tiley<<1)+1)*128 + kz] = o;
+			o = scale*fmaxf(fmaxf(o00, o01), fmaxf(o10, o11))+bias;
+			pOutputs[(((Tilex<<1)+1+Inx/2)*9 + (Tiley<<1)+1)*128 + kz] = relu(o);
 			break;
 		case 2:
 			if (Tiley == 3) break;
 			x0 = Inx*6, x1 = (Inx+1)*6;
-			o00 = scale*(input[x0+1] + input[x0+2] + 4*input[x0+3] + 4*input[x0+4])+bias;
-			o01 = scale*(input[x0+1] - input[x0+2] + 8*input[x0+3] - 8*input[x0+4] + input[x0+5])+bias;
-			o10 = scale*(input[x1+1] + input[x1+2] + 4*input[x1+3] + 4*input[x1+4])+bias;
-			o11 = scale*(input[x1+1] - input[x1+2] + 8*input[x1+3] - 8*input[x1+4] + input[x1+5])+bias;
+			o00 = input[x0+1] + input[x0+2] + 4*input[x0+3] + 4*input[x0+4];
+			o01 = input[x0+1] - input[x0+2] + 8*input[x0+3] - 8*input[x0+4] + input[x0+5];
+			o10 = input[x1+1] + input[x1+2] + 4*input[x1+3] + 4*input[x1+4];
+			o11 = input[x1+1] - input[x1+2] + 8*input[x1+3] - 8*input[x1+4] + input[x1+5];
 			// o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
-			o = fmaxf(fmaxf(relu(o00), relu(o01)), fmaxf(relu(o10), relu(o11)));
-			pOutputs[(((Tilex<<1)+1+Inx/2)*9 + (Tiley<<1)+2)*128 + kz] = o;
+			o = scale*fmaxf(fmaxf(o00, o01), fmaxf(o10, o11))+bias;
+			pOutputs[(((Tilex<<1)+1+Inx/2)*9 + (Tiley<<1)+2)*128 + kz] = relu(o);
 			break;
 	}
 

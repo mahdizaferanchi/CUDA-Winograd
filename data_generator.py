@@ -22,7 +22,8 @@ def bias_generator(output_channel = 128):
 	des = open("data/bias_" + str(output_channel) + ".bin", "wb")
 	des.write(bias)
 
-	bnScale = (np.array(rand(output_channel))-0.5).astype(np.float32)
+	# bnScale = (np.array(rand(output_channel))-0.5).astype(np.float32)
+	bnScale = (np.array(rand(output_channel))*0.5).astype(np.float32)
 	des = open("data/bnScale_" + str(output_channel) + ".bin", "wb")
 	des.write(bnScale)
 
