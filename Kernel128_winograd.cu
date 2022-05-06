@@ -120,6 +120,87 @@ __global__ void kernel_128_winograd_BtdB(float *pInputs, float *pOutputs) {
 	}
 }
 
+__global__ void kernel_128_winograd_AtIA_v2(float *pInputs, float *pBiases, float *pScales, float *pOutputs) { 
+	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = threadIdx.x;
+
+	// int c_input = Inx*6 + Iny;
+
+	 float bias, scale;
+	 extern __shared__ float input[];
+
+	for (int i = 0; i < 6; ++i) {
+		input[(i*6 + Iny) + kz*36] = pInputs[(i*6 + Iny)*16*128 + (Tilex*4+Tiley)*128 + kz];
+	}
+	bias = pBiases[kz];
+	scale = pScales[kz];
+	__syncthreads();
+
+	float tmp[6];
+	for (int i = 0; i < 4; ++i) {
+		switch(i) {
+			case 0:
+				tmp[i] = input[kz*36 + Iny] + input[kz*36 + 6+Iny] + input[kz*36 + 12+Iny] + input[kz*36 + 18+Iny] + input[kz*36 + 24+Iny];
+				break;
+			case 1:
+				tmp[i] = input[kz*36 + 6+Iny] - input[kz*36 + 12+Iny] + 2*input[kz*36 + 18+Iny] - 2*input[kz*36 + 24+Iny];
+				break;
+			case 2:
+				tmp[i] = input[kz*36 + 6+Iny] + input[kz*36 + 12+Iny] + 4*input[kz*36 + 18+Iny] + 4*input[kz*36 + 24+Iny];
+				break;
+			case 3:
+				tmp[i] = input[kz*36 + 6+Iny] - input[kz*36 + 12+Iny] + 8*input[kz*36 + 18+Iny] - 8*input[kz*36 + 24+Iny] + input[kz*36 + 30+Iny];
+				break;
+		}
+	}
+	
+	__syncthreads();
+
+	for (int i = 0; i < 4; i++) {
+		input[kz*36 + i*6 + Iny] = tmp[i];
+	}
+	__syncthreads();
+
+
+	int x;
+	float o;
+	switch(Iny) {
+		case 0:
+			for (int i = 0; i < 4; ++i){
+				if ((Tilex == 3 && i > 1)) return;
+				x = i*6;
+				o = scale*(input[kz*36 + x]+input[kz*36 + x+1]+input[kz*36 + x+2]+input[kz*36 + x+3]+input[kz*36 + x+4])+ bias;
+				pOutputs[(((Tilex<<2)+1+i)*16 + (Tiley<<2)+1)*128 + kz] = o > 0 ? o : 0;
+			}
+			break;
+		case 1:
+			for (int i = 0; i < 4; ++i){
+				if ((Tilex == 3 && i > 1)) return;
+				x = i*6;
+				o = scale*(input[kz*36 + x+1] - input[kz*36 + x+2] + 2*input[kz*36 + x+3] - 2*input[kz*36 + x+4]) + bias;
+				pOutputs[(((Tilex<<2)+1+i)*16 + (Tiley<<2)+2)*128 + kz] = o > 0 ? o : 0;
+			}
+			break;
+		case 2:
+			if (Tiley == 3) break;
+			for (int i = 0; i < 4; ++i){
+				if ((Tilex == 3 && i > 1)) return;
+				x = i*6;
+				o = scale*(input[kz*36 + x+1] + input[kz*36 + x+2] + 4*input[kz*36 + x+3] + 4*input[kz*36 + x+4]) + bias;
+				pOutputs[(((Tilex<<2)+1+i)*16 + (Tiley<<2)+3)*128 + kz] = o > 0 ? o : 0;
+			}
+			break;
+		case 3:
+			if (Tiley == 3) break;
+			for (int i = 0; i < 4; ++i){
+				if ((Tilex == 3 && i > 1)) return;
+				x = i*6;
+				o = scale*(input[kz*36 + x+1] - input[kz*36 + x+2] + 8*input[kz*36 + x+3] - 8*input[kz*36 + x+4] + input[kz*36 + x+5]) + bias;
+				pOutputs[(((Tilex<<2)+1+i)*16 + (Tiley<<2)+4)*128 + kz] = o > 0 ? o : 0;
+			}
+			break;
+	}
+}
+
 __global__ void kernel_128_winograd_AtIA(float *pInputs, float *pBiases, float *pScales, float *pOutputs) { 
 	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = blockIdx.z, Inx = threadIdx.x;
 	// int Tilex = threadIdx.x, Tiley = threadIdx.y, Iny = blockIdx.y, kz = blockIdx.z, Inx = blockIdx.x;
@@ -416,9 +497,10 @@ int kernel_128() {
 
 	kernel_128_winograd_BtdB <<<dim3(4, 4), dim3(128, 6), (6*6*128)<<2 >>> (input, t_input);
 	kernel_128_OuterProduct_128<<<dim3(36, 2), dim3(128, 8), (8*128 + 64*128 + 8*128)<<2 >>> (t_input, l_weights, ip);
-	kernel_128_winograd_AtIA_maxp <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, pooling_output);
+	// kernel_128_winograd_AtIA_maxp <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, pooling_output);
 	// kernel_128_winograd_AtIA_avgp <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, pooling_output);
 	// kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
+	kernel_128_winograd_AtIA_v2 <<<dim3(4, 4), dim3(128, 6), ((6*6*128)<<2)>>> (ip, l_bnBias, l_bnScale, output);
 
 	// cudaCheckError();
 	// status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
@@ -581,10 +663,10 @@ int kernel_128() {
 		ydesc, output);
 	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed3\n");
 
-	status = cudnnPoolingForward(handle, poolingDesc, &one,
-		ydesc, output, &zero,
-		pooldesc, pooling_output);
-	if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
+	// status = cudnnPoolingForward(handle, poolingDesc, &one,
+	// 	ydesc, output, &zero,
+	// 	pooldesc, pooling_output);
+	// if (status != CUDNN_STATUS_SUCCESS) printf("Not Successed4\n");
 
 	cudaDeviceSynchronize();
 	nT2_cudnn = getTimeMicroseconds64();
@@ -624,8 +706,8 @@ int kernel_128() {
 	status = cudnnDestroy(handle);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 
-	// output_checker(tmp_winograd, tmp_cudnn, 14, 128, 1);
-	output_checker(tmp_winograd_pooled, tmp_pooled, 7, 128, 1);
+	output_checker(tmp_winograd, tmp_cudnn, 14, 128, 1);
+	// output_checker(tmp_winograd_pooled, tmp_pooled, 7, 128, 1);
 
 	return ((nT2-nT1) << 16) | (nT2_cudnn-nT1_cudnn);
 }
