@@ -120,7 +120,7 @@ __global__ void kernel_128_winograd_BtdB(float *pInputs, float *pOutputs) {
 	}
 }
 
-__global__ void kernel_128_winograd_AtIA_v2(float *pInputs, float *pBiases, float *pScales, float *pOutputs) { 
+__global__ void kernel_128_winograd_AtIA (float *pInputs, float *pBiases, float *pScales, float *pOutputs) { 
 	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = threadIdx.x;
 
 	// int c_input = Inx*6 + Iny;
@@ -201,194 +201,150 @@ __global__ void kernel_128_winograd_AtIA_v2(float *pInputs, float *pBiases, floa
 	}
 }
 
-__global__ void kernel_128_winograd_AtIA(float *pInputs, float *pBiases, float *pScales, float *pOutputs) { 
-	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = blockIdx.z, Inx = threadIdx.x;
-	// int Tilex = threadIdx.x, Tiley = threadIdx.y, Iny = blockIdx.y, kz = blockIdx.z, Inx = blockIdx.x;
-
-	int c_input = Inx*6 + Iny;
-
-	__shared__ float bias, scale;
-	 extern __shared__ float input[];
-
-	input[c_input] = pInputs[c_input*16*128 + (Tilex*4+Tiley)*128 + kz];
-	bias = pBiases[kz];
-	scale = pScales[kz];
-	__syncthreads();
-
-	float tmp = 0;
-	switch(Inx) {
-		case 0:
-			tmp = input[Iny] + input[6+Iny] + input[12+Iny] + input[18+Iny] + input[24+Iny];
-			break;
-		case 1:
-			tmp = input[6+Iny] - input[12+Iny] + 2*input[18+Iny] - 2*input[24+Iny];
-			break;
-		case 2:
-			tmp = input[6+Iny] + input[12+Iny] + 4*input[18+Iny] + 4*input[24+Iny];
-			break;
-		case 3:
-			tmp = input[6+Iny] - input[12+Iny] + 8*input[18+Iny] - 8*input[24+Iny] + input[30+Iny];
-			break;
-	}
-	__syncthreads();
-
-	input[c_input] = tmp;
-	__syncthreads();
-
-	if (Inx > 3 || (Tilex == 3 && Inx > 1)) return;
-
-	int x;
-	float o;
-	switch(Iny) {
-		case 0:
-			x = Inx*6;
-			o = scale*(input[x]+input[x+1]+input[x+2]+input[x+3]+input[x+4])+ bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+1)*128 + kz] = o > 0 ? o : 0;
-			break;
-		case 1:
-			x = Inx*6;
-			o = scale*(input[x+1] - input[x+2] + 2*input[x+3] - 2*input[x+4]) + bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+2)*128 + kz] = o > 0 ? o : 0;
-			break;
-		case 2:
-			if (Tiley == 3) break;
-			x = Inx*6;
-			o = scale*(input[x+1] + input[x+2] + 4*input[x+3] + 4*input[x+4]) + bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+3)*128 + kz] = o > 0 ? o : 0;
-			break;
-		case 3:
-			if (Tiley == 3) break;
-			x = Inx*6;
-			o = scale*(input[x+1] - input[x+2] + 8*input[x+3] - 8*input[x+4] + input[x+5]) + bias;
-			pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+4)*128 + kz] = o > 0 ? o : 0;
-			break;
-	}
-}
-
 __global__ void kernel_128_winograd_AtIA_avgp(float *pInputs, float *pBiases, float *pScales, float *pOutputs) { 
-	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = blockIdx.z, Inx = threadIdx.x;
-	// int Tilex = threadIdx.x, Tiley = threadIdx.y, Iny = blockIdx.y, kz = blockIdx.z, Inx = blockIdx.x;
+	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = threadIdx.x;
 
-	int c_input = Inx*6 + Iny;
+	// int c_input = Inx*6 + Iny;
 
-	__shared__ float bias, scale;
+	 float bias, scale;
 	 extern __shared__ float input[];
 
-	input[c_input] = pInputs[c_input*16*128 + (Tilex*4+Tiley)*128 + kz];
+	for (int i = 0; i < 6; ++i) {
+		input[(i*6 + Iny) + kz*36] = pInputs[(i*6 + Iny)*16*128 + (Tilex*4+Tiley)*128 + kz];
+	}
 	bias = pBiases[kz];
 	scale = pScales[kz];
 	__syncthreads();
 
-	float tmp = 0;
-	switch(Inx) {
-		case 0:
-			tmp = input[Iny] + input[6+Iny] + input[12+Iny] + input[18+Iny] + input[24+Iny];
-			break;
-		case 1:
-			tmp = input[6+Iny] - input[12+Iny] + 2*input[18+Iny] - 2*input[24+Iny];
-			break;
-		case 2:
-			tmp = input[6+Iny] + input[12+Iny] + 4*input[18+Iny] + 4*input[24+Iny];
-			break;
-		case 3:
-			tmp = input[6+Iny] - input[12+Iny] + 8*input[18+Iny] - 8*input[24+Iny] + input[30+Iny];
-			break;
+	float tmp[6];
+	for (int i = 0; i < 4; ++i) {
+		switch(i) {
+			case 0:
+				tmp[i] = input[kz*36 + Iny] + input[kz*36 + 6+Iny] + input[kz*36 + 12+Iny] + input[kz*36 + 18+Iny] + input[kz*36 + 24+Iny];
+				break;
+			case 1:
+				tmp[i] = input[kz*36 + 6+Iny] - input[kz*36 + 12+Iny] + 2*input[kz*36 + 18+Iny] - 2*input[kz*36 + 24+Iny];
+				break;
+			case 2:
+				tmp[i] = input[kz*36 + 6+Iny] + input[kz*36 + 12+Iny] + 4*input[kz*36 + 18+Iny] + 4*input[kz*36 + 24+Iny];
+				break;
+			case 3:
+				tmp[i] = input[kz*36 + 6+Iny] - input[kz*36 + 12+Iny] + 8*input[kz*36 + 18+Iny] - 8*input[kz*36 + 24+Iny] + input[kz*36 + 30+Iny];
+				break;
+		}
+	}
+	
+	__syncthreads();
+
+	for (int i = 0; i < 4; i++) {
+		input[kz*36 + i*6 + Iny] = tmp[i];
 	}
 	__syncthreads();
 
-	input[c_input] = tmp;
-	__syncthreads();
-
-	if (Inx >= 3 || Inx == 1 || (Tilex == 3 && Inx > 1)) return;
 	int x0, x1;
 	float o, o00, o01, o10, o11;
 	switch(Iny) {
 		case 0:
-			x0 = Inx*6, x1 = (Inx+1)*6;
-			o00 = scale*(input[x0]+input[x0+1]+input[x0+2]+input[x0+3]+input[x0+4])+bias;
-			o01 = scale*(input[x0+1] - input[x0+2] + 2*input[x0+3] - 2*input[x0+4])+bias;
-			o10 = scale*(input[x1]+input[x1+1]+input[x1+2]+input[x1+3]+input[x1+4])+bias;
-			o11 = scale*(input[x1+1] - input[x1+2] + 2*input[x1+3] - 2*input[x1+4])+bias;
-			o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
-			// o = fmaxf(fmaxf(relu(o00), relu(o01)), fmaxf(relu(o10), relu(o11)));
-			pOutputs[(((Tilex<<1)+1+Inx/2)*9 + (Tiley<<1)+1)*128 + kz] = o;
+			for (int i = 0; i < 4; i+=2) {
+				if ((Tilex == 3 && i > 1)) return;
+				x0 = i*6, x1 = (i+1)*6;
+				o00 = scale*(input[kz*36 + x0]+input[kz*36 + x0+1]+input[kz*36 + x0+2]+input[kz*36 + x0+3]+input[kz*36 + x0+4])+bias;
+				o01 = scale*(input[kz*36 + x0+1] - input[kz*36 + x0+2] + 2*input[kz*36 + x0+3] - 2*input[kz*36 + x0+4])+bias;
+				o10 = scale*(input[kz*36 + x1]+input[kz*36 + x1+1]+input[kz*36 + x1+2]+input[kz*36 + x1+3]+input[kz*36 + x1+4])+bias;
+				o11 = scale*(input[kz*36 + x1+1] - input[kz*36 + x1+2] + 2*input[kz*36 + x1+3] - 2*input[kz*36 + x1+4])+bias;
+				o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
+				// o = fmaxf(fmaxf(relu(o00), relu(o01)), fmaxf(relu(o10), relu(o11)));
+				pOutputs[(((Tilex<<1)+1+i/2)*9 + (Tiley<<1)+1)*128 + kz] = o;
+			}
 			break;
 		case 2:
 			if (Tiley == 3) break;
-			x0 = Inx*6, x1 = (Inx+1)*6;
-			o00 = scale*(input[x0+1] + input[x0+2] + 4*input[x0+3] + 4*input[x0+4])+bias;
-			o01 = scale*(input[x0+1] - input[x0+2] + 8*input[x0+3] - 8*input[x0+4] + input[x0+5])+bias;
-			o10 = scale*(input[x1+1] + input[x1+2] + 4*input[x1+3] + 4*input[x1+4])+bias;
-			o11 = scale*(input[x1+1] - input[x1+2] + 8*input[x1+3] - 8*input[x1+4] + input[x1+5])+bias;
-			o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
-			// o = fmaxf(fmaxf(relu(o00), relu(o01)), fmaxf(relu(o10), relu(o11)));
-			pOutputs[(((Tilex<<1)+1+Inx/2)*9 + (Tiley<<1)+2)*128 + kz] = o;
+			for (int i = 0; i < 4; i+=2) {
+				if ((Tilex == 3 && i > 1)) return;
+				x0 = i*6, x1 = (i+1)*6;
+				o00 = scale*(input[kz*36 + x0+1] + input[kz*36 + x0+2] + 4*input[kz*36 + x0+3] + 4*input[kz*36 + x0+4])+bias;
+				o01 = scale*(input[kz*36 + x0+1] - input[kz*36 + x0+2] + 8*input[kz*36 + x0+3] - 8*input[kz*36 + x0+4] + input[kz*36 + x0+5])+bias;
+				o10 = scale*(input[kz*36 + x1+1] + input[kz*36 + x1+2] + 4*input[kz*36 + x1+3] + 4*input[kz*36 + x1+4])+bias;
+				o11 = scale*(input[kz*36 + x1+1] - input[kz*36 + x1+2] + 8*input[kz*36 + x1+3] - 8*input[kz*36 + x1+4] + input[kz*36 + x1+5])+bias;
+				o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
+				// o = fmaxf(fmaxf(relu(o00), relu(o01)), fmaxf(relu(o10), relu(o11)));
+				pOutputs[(((Tilex<<1)+1+i/2)*9 + (Tiley<<1)+2)*128 + kz] = o;
+			}
 			break;
 	}
-
 }
 
 __global__ void kernel_128_winograd_AtIA_maxp(float *pInputs, float *pBiases, float *pScales, float *pOutputs) { 
-	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = blockIdx.z, Inx = threadIdx.x;
-	// int Tilex = threadIdx.x, Tiley = threadIdx.y, Iny = blockIdx.y, kz = blockIdx.z, Inx = blockIdx.x;
+	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = threadIdx.x;
 
-	int c_input = Inx*6 + Iny;
+	// int c_input = Inx*6 + Iny;
 
-	__shared__ float bias, scale;
+	 float bias, scale;
 	 extern __shared__ float input[];
 
-	input[c_input] = pInputs[c_input*16*128 + (Tilex*4+Tiley)*128 + kz];
+	for (int i = 0; i < 6; ++i) {
+		input[(i*6 + Iny) + kz*36] = pInputs[(i*6 + Iny)*16*128 + (Tilex*4+Tiley)*128 + kz];
+	}
 	bias = pBiases[kz];
 	scale = pScales[kz];
 	__syncthreads();
 
-	float tmp = 0;
-	switch(Inx) {
-		case 0:
-			tmp = input[Iny] + input[6+Iny] + input[12+Iny] + input[18+Iny] + input[24+Iny];
-			break;
-		case 1:
-			tmp = input[6+Iny] - input[12+Iny] + 2*input[18+Iny] - 2*input[24+Iny];
-			break;
-		case 2:
-			tmp = input[6+Iny] + input[12+Iny] + 4*input[18+Iny] + 4*input[24+Iny];
-			break;
-		case 3:
-			tmp = input[6+Iny] - input[12+Iny] + 8*input[18+Iny] - 8*input[24+Iny] + input[30+Iny];
-			break;
+	float tmp[6];
+	for (int i = 0; i < 4; ++i) {
+		switch(i) {
+			case 0:
+				tmp[i] = input[kz*36 + Iny] + input[kz*36 + 6+Iny] + input[kz*36 + 12+Iny] + input[kz*36 + 18+Iny] + input[kz*36 + 24+Iny];
+				break;
+			case 1:
+				tmp[i] = input[kz*36 + 6+Iny] - input[kz*36 + 12+Iny] + 2*input[kz*36 + 18+Iny] - 2*input[kz*36 + 24+Iny];
+				break;
+			case 2:
+				tmp[i] = input[kz*36 + 6+Iny] + input[kz*36 + 12+Iny] + 4*input[kz*36 + 18+Iny] + 4*input[kz*36 + 24+Iny];
+				break;
+			case 3:
+				tmp[i] = input[kz*36 + 6+Iny] - input[kz*36 + 12+Iny] + 8*input[kz*36 + 18+Iny] - 8*input[kz*36 + 24+Iny] + input[kz*36 + 30+Iny];
+				break;
+		}
+	}
+	
+	__syncthreads();
+
+	for (int i = 0; i < 4; i++) {
+		input[kz*36 + i*6 + Iny] = tmp[i];
 	}
 	__syncthreads();
 
-	input[c_input] = tmp;
-	__syncthreads();
-
-	if (Inx >= 3 || Inx == 1 || (Tilex == 3 && Inx > 1)) return;
 	int x0, x1;
 	float o, o00, o01, o10, o11;
 	switch(Iny) {
 		case 0:
-			x0 = Inx*6, x1 = (Inx+1)*6;
-			o00 = input[x0]+input[x0+1]+input[x0+2]+input[x0+3]+input[x0+4];
-			o01 = input[x0+1] - input[x0+2] + 2*input[x0+3] - 2*input[x0+4];
-			o10 = input[x1]+input[x1+1]+input[x1+2]+input[x1+3]+input[x1+4];
-			o11 = input[x1+1] - input[x1+2] + 2*input[x1+3] - 2*input[x1+4];
-			// o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
-			o = scale*fmaxf(fmaxf(o00, o01), fmaxf(o10, o11))+bias;
-			pOutputs[(((Tilex<<1)+1+Inx/2)*9 + (Tiley<<1)+1)*128 + kz] = relu(o);
+			for (int i = 0; i < 4; i+=2) {
+				if ((Tilex == 3 && i > 1)) return;
+				x0 = i*6, x1 = (i+1)*6;
+				o00 = input[kz*36 + x0]+input[kz*36 + x0+1]+input[kz*36 + x0+2]+input[kz*36 + x0+3]+input[kz*36 + x0+4];
+				o01 = input[kz*36 + x0+1] - input[kz*36 + x0+2] + 2*input[kz*36 + x0+3] - 2*input[kz*36 + x0+4];
+				o10 = input[kz*36 + x1]+input[kz*36 + x1+1]+input[kz*36 + x1+2]+input[kz*36 + x1+3]+input[kz*36 + x1+4];
+				o11 = input[kz*36 + x1+1] - input[kz*36 + x1+2] + 2*input[kz*36 + x1+3] - 2*input[kz*36 + x1+4];
+				// o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
+				o = scale*fmaxf(fmaxf(o00, o01), fmaxf(o10, o11))+bias;
+				pOutputs[(((Tilex<<1)+1+i/2)*9 + (Tiley<<1)+1)*128 + kz] = relu(o);
+			}
 			break;
 		case 2:
 			if (Tiley == 3) break;
-			x0 = Inx*6, x1 = (Inx+1)*6;
-			o00 = input[x0+1] + input[x0+2] + 4*input[x0+3] + 4*input[x0+4];
-			o01 = input[x0+1] - input[x0+2] + 8*input[x0+3] - 8*input[x0+4] + input[x0+5];
-			o10 = input[x1+1] + input[x1+2] + 4*input[x1+3] + 4*input[x1+4];
-			o11 = input[x1+1] - input[x1+2] + 8*input[x1+3] - 8*input[x1+4] + input[x1+5];
-			// o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
-			o = scale*fmaxf(fmaxf(o00, o01), fmaxf(o10, o11))+bias;
-			pOutputs[(((Tilex<<1)+1+Inx/2)*9 + (Tiley<<1)+2)*128 + kz] = relu(o);
+			for (int i = 0; i < 4; i+=2) {
+				if ((Tilex == 3 && i > 1)) return;
+				x0 = i*6, x1 = (i+1)*6;
+				o00 = input[kz*36 + x0+1] + input[kz*36 + x0+2] + 4*input[kz*36 + x0+3] + 4*input[kz*36 + x0+4];
+				o01 = input[kz*36 + x0+1] - input[kz*36 + x0+2] + 8*input[kz*36 + x0+3] - 8*input[kz*36 + x0+4] + input[kz*36 + x0+5];
+				o10 = input[kz*36 + x1+1] + input[kz*36 + x1+2] + 4*input[kz*36 + x1+3] + 4*input[kz*36 + x1+4];
+				o11 = input[kz*36 + x1+1] - input[kz*36 + x1+2] + 8*input[kz*36 + x1+3] - 8*input[kz*36 + x1+4] + input[kz*36 + x1+5];
+				// o = (0.25)*(relu(o00)+relu(o01)+relu(o10)+relu(o11));
+				o = scale*fmaxf(fmaxf(o00, o01), fmaxf(o10, o11))+bias;
+				pOutputs[(((Tilex<<1)+1+i/2)*9 + (Tiley<<1)+2)*128 + kz] = relu(o);
+			}
 			break;
 	}
-
 }
 
 __global__ void kernel_128_OuterProduct_128(float *A, float *B, float *C) {
@@ -477,8 +433,8 @@ int kernel_128() {
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 	// CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
 	status = cudnnSetPooling2dDescriptor(winpoolingDesc,
-		// CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
-		CUDNN_POOLING_MAX,
+		CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
+		// CUDNN_POOLING_MAX,
 		CUDNN_NOT_PROPAGATE_NAN, 2, 2, 1, 1, 2, 2);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed17\n");
 
@@ -497,10 +453,9 @@ int kernel_128() {
 
 	kernel_128_winograd_BtdB <<<dim3(4, 4), dim3(128, 6), (6*6*128)<<2 >>> (input, t_input);
 	kernel_128_OuterProduct_128<<<dim3(36, 2), dim3(128, 8), (8*128 + 64*128 + 8*128)<<2 >>> (t_input, l_weights, ip);
-	// kernel_128_winograd_AtIA_maxp <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, pooling_output);
-	// kernel_128_winograd_AtIA_avgp <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, pooling_output);
-	// kernel_128_winograd_AtIA <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
-	kernel_128_winograd_AtIA_v2 <<<dim3(4, 4), dim3(128, 6), ((6*6*128)<<2)>>> (ip, l_bnBias, l_bnScale, output);
+	// kernel_128_winograd_AtIA_maxp <<<dim3(4, 4), dim3(128, 6), ((6*6*128)<<2)>>> (ip, l_bnBias, l_bnScale, pooling_output);
+	// kernel_128_winograd_AtIA_avgp <<<dim3(4, 4), dim3(128, 6), ((6*6*128)<<2)>>> (ip, l_bnBias, l_bnScale, pooling_output);
+	kernel_128_winograd_AtIA <<<dim3(4, 4), dim3(128, 6), ((6*6*128)<<2)>>> (ip, l_bnBias, l_bnScale, output);
 
 	// cudaCheckError();
 	// status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
@@ -617,8 +572,8 @@ int kernel_128() {
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 	// CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
 	status = cudnnSetPooling2dDescriptor(poolingDesc,
-		// CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
-		CUDNN_POOLING_MAX,
+		CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
+		// CUDNN_POOLING_MAX,
 		CUDNN_NOT_PROPAGATE_NAN, 2, 2, 0, 0, 2, 2);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed17\n");
 	cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc;
