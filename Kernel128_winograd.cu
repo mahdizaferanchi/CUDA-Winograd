@@ -120,6 +120,68 @@ __global__ void kernel_128_winograd_BtdB(float *pInputs, float *pOutputs) {
 	}
 }
 
+__global__ void kernel_128_winograd_AtIA_old(float *pInputs, float *pBiases, float *pScales, float *pOutputs) {
+    int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = blockIdx.z, Inx = threadIdx.x;
+    int c_input = Inx*6 + Iny;
+
+    __shared__ float bias, scale;
+    extern __shared__ float input[];
+
+    input[c_input] = pInputs[c_input*16*128 + (Tilex*4+Tiley)*128 + kz];
+    bias = pBiases[kz];
+    scale = pScales[kz];
+    __syncthreads();
+
+    float tmp = 0;
+    switch(Inx) {
+        case 0:
+            tmp = input[Iny] + input[6+Iny] + input[12+Iny] + input[18+Iny] + input[24+Iny];
+            break;
+        case 1:
+            tmp = input[6+Iny] - input[12+Iny] + 2*input[18+Iny] - 2*input[24+Iny];
+            break;
+        case 2:
+            tmp = input[6+Iny] + input[12+Iny] + 4*input[18+Iny] + 4*input[24+Iny];
+            break;
+        case 3:
+            tmp = input[6+Iny] - input[12+Iny] + 8*input[18+Iny] - 8*input[24+Iny] + input[30+Iny];
+            break;
+    }
+    __syncthreads();
+
+    input[c_input] = tmp;
+    __syncthreads();
+
+    if (Inx > 3 || (Tilex == 3 && Inx > 1)) return;
+    
+    int x;
+    float o;
+    switch(Iny) {
+        case 0:
+            x = Inx*6;
+            o = scale*(input[x]+input[x+1]+input[x+2]+input[x+3]+input[x+4])+ bias;
+            pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+1)*128 + kz] = o > 0 ? o : 0;
+            break;
+        case 1:
+            x = Inx*6;
+            o = scale*(input[x+1] - input[x+2] + 2*input[x+3] - 2*input[x+4]) + bias;
+            pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+2)*128 + kz] = o > 0 ? o : 0;
+            break;
+        case 2:
+            if (Tiley == 3) break;
+            x = Inx*6;
+            o = scale*(input[x+1] + input[x+2] + 4*input[x+3] + 4*input[x+4]) + bias;
+            pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+3)*128 + kz] = o > 0 ? o : 0;
+            break;
+        case 3:
+            if (Tiley == 3) break;
+            x = Inx*6;
+            o = scale*(input[x+1] - input[x+2] + 8*input[x+3] - 8*input[x+4] + input[x+5]) + bias;
+            pOutputs[(((Tilex<<2)+1+Inx)*16 + (Tiley<<2)+4)*128 + kz] = o > 0 ? o : 0;
+            break;
+    }
+}
+
 __global__ void kernel_128_winograd_AtIA (float *pInputs, float *pBiases, float *pScales, float *pOutputs) { 
 	int Tilex = blockIdx.x, Tiley = blockIdx.y, Iny = threadIdx.y, kz = threadIdx.x;
 
@@ -433,8 +495,8 @@ int kernel_128() {
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 	// CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
 	status = cudnnSetPooling2dDescriptor(winpoolingDesc,
-		CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
-		// CUDNN_POOLING_MAX,
+		// CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
+		CUDNN_POOLING_MAX,
 		CUDNN_NOT_PROPAGATE_NAN, 2, 2, 1, 1, 2, 2);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed17\n");
 
@@ -456,6 +518,7 @@ int kernel_128() {
 	// kernel_128_winograd_AtIA_maxp <<<dim3(4, 4), dim3(128, 6), ((6*6*128)<<2)>>> (ip, l_bnBias, l_bnScale, pooling_output);
 	// kernel_128_winograd_AtIA_avgp <<<dim3(4, 4), dim3(128, 6), ((6*6*128)<<2)>>> (ip, l_bnBias, l_bnScale, pooling_output);
 	kernel_128_winograd_AtIA <<<dim3(4, 4), dim3(128, 6), ((6*6*128)<<2)>>> (ip, l_bnBias, l_bnScale, output);
+    // kernel_128_winograd_AtIA_old <<<dim3(4, 4, 128), dim3(6, 6), ((6*6)<<2)>>> (ip, l_bnBias, l_bnScale, output);
 
 	// cudaCheckError();
 	// status = cudnnPoolingForward(win_handle, winpoolingDesc, &one,
@@ -562,6 +625,9 @@ int kernel_128() {
 	status = cudnnSetConvolution2dDescriptor(conv_desc, 0,0, 1,1,1,1, CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT); //CUDNN_CONVOLUTION
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed11\n");
 
+	status = cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION); 
+	if (status != CUDNN_STATUS_SUCCESS) printf("failed12\n");
+
 	cudnnActivationDescriptor_t act_desc;
 	status = cudnnCreateActivationDescriptor(&act_desc);  
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed12\n");
@@ -572,8 +638,8 @@ int kernel_128() {
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 	// CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
 	status = cudnnSetPooling2dDescriptor(poolingDesc,
-		CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
-		// CUDNN_POOLING_MAX,
+		// CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
+		CUDNN_POOLING_MAX,
 		CUDNN_NOT_PROPAGATE_NAN, 2, 2, 0, 0, 2, 2);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed17\n");
 	cudnnTensorDescriptor_t bnScaleBiasMeanVarDesc;
@@ -661,8 +727,8 @@ int kernel_128() {
 	status = cudnnDestroy(handle);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 
-	output_checker(tmp_winograd, tmp_cudnn, 14, 128, 1);
-	// output_checker(tmp_winograd_pooled, tmp_pooled, 7, 128, 1);
+	// output_checker(tmp_winograd, tmp_cudnn, 14, 128, 1);
+	output_checker(tmp_winograd_pooled, tmp_pooled, 7, 128, 1);
 
 	return ((nT2-nT1) << 16) | (nT2_cudnn-nT1_cudnn);
 }
