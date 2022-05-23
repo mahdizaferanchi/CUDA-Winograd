@@ -727,8 +727,8 @@ int kernel_128() {
 	status = cudnnDestroy(handle);
 	if (status != CUDNN_STATUS_SUCCESS) printf("failed16\n");
 
-	// output_checker(tmp_winograd, tmp_cudnn, 14, 128, 1);
-	output_checker(tmp_winograd_pooled, tmp_pooled, 7, 128, 1);
+	output_checker(tmp_winograd, tmp_cudnn, 14, 128, 1);
+	// output_checker(tmp_winograd_pooled, tmp_pooled, 7, 128, 1);
 
 	return ((nT2-nT1) << 16) | (nT2_cudnn-nT1_cudnn);
 }
